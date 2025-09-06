@@ -89,7 +89,7 @@ export default function LoginScreen() {
               onPress={() => router.push('/(auth)/signup')}
             >
               <Text style={styles.signupButtonText}>
-                Don't have an account? <Text style={styles.signupLink}>Sign Up</Text>
+                Don&apos;t have an account? <Text style={styles.signupLink}>Sign Up</Text>
               </Text>
             </TouchableOpacity>
           </View>

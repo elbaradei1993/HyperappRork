@@ -6,8 +6,6 @@ import {
   Text,
   Animated,
   Alert,
-  Dimensions,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AlertTriangle, MapPin, Users } from 'lucide-react-native';
@@ -18,11 +16,8 @@ import { HyperMapView } from '@/components/MapView';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 
-const { width, height } = Dimensions.get('window');
-
 export default function MapScreen() {
   const [showSOSModal, setShowSOSModal] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState<{lat: number, lng: number} | null>(null);
   const { location, requestPermission } = useLocation();
   const { alerts, nearbyUsers } = useAlerts();
   
@@ -31,7 +26,7 @@ export default function MapScreen() {
 
   useEffect(() => {
     requestPermission();
-  }, []);
+  }, [requestPermission]);
 
   useEffect(() => {
     const pulseAnimation = Animated.loop(
@@ -51,7 +46,7 @@ export default function MapScreen() {
     pulseAnimation.start();
 
     return () => pulseAnimation.stop();
-  }, []);
+  }, [pulseAnim]);
 
   const handleSOSPress = () => {
     Animated.sequence([
@@ -71,7 +66,6 @@ export default function MapScreen() {
   };
 
   const handleMapPress = (coordinate: {lat: number, lng: number}) => {
-    setSelectedLocation(coordinate);
     Alert.alert(
       'Report at this location?',
       'What would you like to report here?',

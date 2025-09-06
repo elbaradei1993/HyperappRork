@@ -23,15 +23,6 @@ export const [LocationProvider, useLocation] = createContextHook<LocationContext
   const [error, setError] = useState<string | null>(null);
   const [watchId, setWatchId] = useState<Location.LocationSubscription | null>(null);
 
-  useEffect(() => {
-    requestPermission();
-    return () => {
-      if (watchId) {
-        watchId.remove();
-      }
-    };
-  }, []);
-
   const requestPermission = useCallback(async () => {
     try {
       setLoading(true);
@@ -66,7 +57,7 @@ export const [LocationProvider, useLocation] = createContextHook<LocationContext
         );
 
         // Watch position for updates
-        const id = navigator.geolocation.watchPosition(
+        navigator.geolocation.watchPosition(
           (position) => {
             setLocation({
               latitude: position.coords.latitude,
@@ -130,7 +121,16 @@ export const [LocationProvider, useLocation] = createContextHook<LocationContext
     } finally {
       setLoading(false);
     }
-  }, [watchId]);
+  }, []);
+
+  useEffect(() => {
+    requestPermission();
+    return () => {
+      if (watchId) {
+        watchId.remove();
+      }
+    };
+  }, [requestPermission, watchId]);
 
   const getCurrentLocation = useCallback(async (): Promise<LocationData | null> => {
     try {

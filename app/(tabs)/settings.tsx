@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
-  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,7 +20,6 @@ import {
   Trash2,
   LogOut,
   ChevronRight,
-  Check,
 } from 'lucide-react-native';
 
 export default function SettingsScreen() {
@@ -35,20 +33,18 @@ export default function SettingsScreen() {
   const [radius, setRadius] = useState(10);
   const [language, setLanguage] = useState('English');
   const [theme, setTheme] = useState('dark');
-  const [showLanguageModal, setShowLanguageModal] = useState(false);
-  const [showThemeModal, setShowThemeModal] = useState(false);
 
-  // Load settings on mount
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     try {
       const savedSettings = await AsyncStorage.getItem('appSettings');
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
-        setNotifications(settings.notifications || notifications);
+        setNotifications(settings.notifications || {
+          sos: true,
+          vibes: true,
+          events: true,
+          nearby: false,
+        });
         setRadius(settings.radius || 10);
         setLanguage(settings.language || 'English');
         setTheme(settings.theme || 'dark');
@@ -56,7 +52,12 @@ export default function SettingsScreen() {
     } catch (error) {
       console.error('Error loading settings:', error);
     }
-  };
+  }, []);
+
+  // Load settings on mount
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   const saveSettings = async (newSettings: any) => {
     try {
@@ -87,14 +88,12 @@ export default function SettingsScreen() {
 
   const handleLanguageChange = async (newLanguage: string) => {
     setLanguage(newLanguage);
-    setShowLanguageModal(false);
     await saveSettings({ language: newLanguage });
     Alert.alert('Language Changed', `Language set to ${newLanguage}`);
   };
 
   const handleThemeChange = async (newTheme: string) => {
     setTheme(newTheme);
-    setShowThemeModal(false);
     await saveSettings({ theme: newTheme });
     Alert.alert('Theme Changed', `Theme set to ${newTheme} mode`);
   };

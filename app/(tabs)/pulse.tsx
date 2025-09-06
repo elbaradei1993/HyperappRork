@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -20,7 +20,6 @@ import {
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAlerts } from '@/contexts/AlertContext';
-import { useLocation } from '@/contexts/LocationContext';
 
 const { width } = Dimensions.get('window');
 
@@ -50,18 +49,12 @@ interface NeighborhoodVibe {
 
 export default function CommunityPulseScreen() {
   const { alerts } = useAlerts();
-  const { location } = useLocation();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTimeRange, setSelectedTimeRange] = useState<'24h' | '7d' | '30d'>('24h');
   const [vibeData, setVibeData] = useState<VibeData[]>([]);
   const [neighborhoodVibes, setNeighborhoodVibes] = useState<NeighborhoodVibe[]>([]);
 
-  useEffect(() => {
-    calculateVibeData();
-    calculateNeighborhoodVibes();
-  }, [alerts, selectedTimeRange]);
-
-  const calculateVibeData = () => {
+  const calculateVibeData = useCallback(() => {
     const now = new Date();
     const timeFilter = {
       '24h': 24 * 60 * 60 * 1000,
@@ -92,7 +85,7 @@ export default function CommunityPulseScreen() {
     }));
 
     setVibeData(data);
-  };
+  }, [alerts, selectedTimeRange]);
 
   const calculateNeighborhoodVibes = () => {
     // Simulate neighborhood data based on location
@@ -136,6 +129,11 @@ export default function CommunityPulseScreen() {
 
     setNeighborhoodVibes(neighborhoods.sort((a, b) => a.distance - b.distance));
   };
+
+  useEffect(() => {
+    calculateVibeData();
+    calculateNeighborhoodVibes();
+  }, [calculateVibeData]);
 
   const formatTimeAgo = (date: Date) => {
     const now = new Date();

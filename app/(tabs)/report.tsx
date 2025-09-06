@@ -16,10 +16,8 @@ import {
   AlertTriangle,
   Car,
   Users,
-  Music,
   Shield,
   MapPin,
-  Camera,
   Send,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';

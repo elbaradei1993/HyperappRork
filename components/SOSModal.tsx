@@ -34,7 +34,6 @@ export function SOSModal({ visible, onClose, location }: SOSModalProps) {
   const [anonymous, setAnonymous] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [responseReceived, setResponseReceived] = useState(false);
 
   const { sendSOSAlert } = useAlerts();
 
@@ -58,7 +57,6 @@ export function SOSModal({ visible, onClose, location }: SOSModalProps) {
       // Simulate response check after 10 seconds
       setTimeout(() => {
         const hasResponse = Math.random() > 0.5; // 50% chance of response
-        setResponseReceived(hasResponse);
         
         if (hasResponse) {
           Alert.alert('Help is Coming', 'Hang in there, we\'re seeking help for you.');
@@ -83,7 +81,6 @@ export function SOSModal({ visible, onClose, location }: SOSModalProps) {
     setAnonymous(false);
     setLoading(false);
     setSubmitted(false);
-    setResponseReceived(false);
     onClose();
   };
 

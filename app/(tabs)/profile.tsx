@@ -9,7 +9,6 @@ import {
   Alert,
   Image,
   Platform,
-  Dimensions,
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
