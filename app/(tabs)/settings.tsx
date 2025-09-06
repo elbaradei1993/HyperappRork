@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Bell,
@@ -30,6 +31,7 @@ import {
 
 export default function SettingsScreen() {
   const { signOut, user } = useAuth();
+  const router = useRouter();
   const [notifications, setNotifications] = useState({
     sos: true,
     vibes: true,
@@ -307,17 +309,32 @@ export default function SettingsScreen() {
               <ChevronRight size={16} color="#8e8e93" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.optionItem}>
+            <TouchableOpacity 
+              style={styles.optionItem}
+              onPress={() => router.push('/privacy-policy')}
+            >
               <Text style={styles.optionLabel}>Privacy Policy</Text>
               <ChevronRight size={16} color="#8e8e93" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.optionItem}>
+            <TouchableOpacity 
+              style={styles.optionItem}
+              onPress={() => router.push('/terms-of-service')}
+            >
               <Text style={styles.optionLabel}>Terms of Service</Text>
               <ChevronRight size={16} color="#8e8e93" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.optionItem}>
+            <TouchableOpacity 
+              style={styles.optionItem}
+              onPress={() => {
+                Alert.alert(
+                  'Data & Storage',
+                  'Your data is stored securely in our encrypted database. You can request data export or deletion by contacting support@hyperapp.com',
+                  [{ text: 'OK' }]
+                );
+              }}
+            >
               <Text style={styles.optionLabel}>Data & Storage</Text>
               <ChevronRight size={16} color="#8e8e93" />
             </TouchableOpacity>
