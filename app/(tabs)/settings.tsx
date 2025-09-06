@@ -1,262 +1,305 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
+  Switch,
   Alert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocation } from '@/contexts/LocationContext';
-import { useAlerts } from '@/contexts/AlertContext';
+import { useAuth } from '@/contexts/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  Heart,
-  AlertTriangle,
-  Car,
-  Users,
-  Music,
-  Shield,
+  Bell,
+  Globe,
+  Palette,
   MapPin,
-  Camera,
-  Send,
+  Shield,
+  Trash2,
+  LogOut,
+  ChevronRight,
+  Check,
 } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 
-const VIBE_TYPES = [
-  { id: 'safe', label: 'Safe', icon: Shield, color: '#4CAF50', gradient: ['#4CAF50', '#66BB6A'] },
-  { id: 'calm', label: 'Calm', icon: Heart, color: '#2196F3', gradient: ['#2196F3', '#42A5F5'] },
-  { id: 'crowded', label: 'Crowded', icon: Users, color: '#FFC107', gradient: ['#FFC107', '#FFD54F'] },
-  { id: 'suspicious', label: 'Suspicious', icon: AlertTriangle, color: '#FF9800', gradient: ['#FF9800', '#FFB74D'] },
-  { id: 'dangerous', label: 'Dangerous', icon: AlertTriangle, color: '#F44336', gradient: ['#F44336', '#EF5350'] },
-];
+export default function SettingsScreen() {
+  const { signOut } = useAuth();
+  const [notifications, setNotifications] = useState({
+    sos: true,
+    vibes: true,
+    events: true,
+    nearby: false,
+  });
+  const [radius, setRadius] = useState(10);
+  const [language, setLanguage] = useState('English');
+  const [theme, setTheme] = useState('dark');
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [showThemeModal, setShowThemeModal] = useState(false);
 
-const EVENT_TYPES = [
-  { id: 'accident', label: 'Traffic Accident', icon: Car, color: '#FF9800' },
-  { id: 'incident', label: 'Safety Incident', icon: AlertTriangle, color: '#f44336' },
-  { id: 'emergency', label: 'Emergency', icon: Shield, color: '#ff4757' },
-  { id: 'other', label: 'Other Event', icon: MapPin, color: '#607D8B' },
-];
+  // Load settings on mount
+  useEffect(() => {
+    loadSettings();
+  }, []);
 
-export default function ReportScreen() {
-  const [reportType, setReportType] = useState<'vibe' | 'event' | null>(null);
-  const [selectedType, setSelectedType] = useState<string>('');
-  const [description, setDescription] = useState('');
-  const [tags, setTags] = useState('');
-  const [anonymous, setAnonymous] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const { location } = useLocation();
-  const { addAlert } = useAlerts();
-
-  const handleSubmit = async () => {
-    if (!selectedType || !description.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
-      return;
-    }
-
-    if (!location) {
-      Alert.alert('Error', 'Location not available. Please enable location services.');
-      return;
-    }
-
-    if (!reportType) {
-      Alert.alert('Error', 'Report type is required.');
-      return;
-    }
-
-    setLoading(true);
+  const loadSettings = async () => {
     try {
-      await addAlert({
-        type: selectedType,
-        description: description.trim(),
-        tags: tags.trim(),
-        location,
-        anonymous,
-        reportType: reportType,
-      });
-
-      Alert.alert('Success', `${reportType === 'vibe' ? 'Vibe' : 'Event'} reported successfully!`);
-      
-      // Reset form
-      setReportType(null);
-      setSelectedType('');
-      setDescription('');
-      setTags('');
-      setAnonymous(false);
-    } catch (error: any) {
-      Alert.alert('Error', error.message);
-    } finally {
-      setLoading(false);
+      const savedSettings = await AsyncStorage.getItem('appSettings');
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        setNotifications(settings.notifications || notifications);
+        setRadius(settings.radius || 10);
+        setLanguage(settings.language || 'English');
+        setTheme(settings.theme || 'dark');
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
     }
   };
 
-  const renderTypeSelection = () => {
-    const types = reportType === 'vibe' ? VIBE_TYPES : EVENT_TYPES;
-    
-    return (
-      <View style={styles.typeGrid}>
-        {types.map((type) => {
-          const IconComponent = type.icon;
-          const isSelected = selectedType === type.id;
-          
-          return (
-            <TouchableOpacity
-              key={type.id}
-              style={[
-                styles.typeCard,
-                isSelected && { borderColor: type.color, backgroundColor: `${type.color}20` },
-              ]}
-              onPress={() => setSelectedType(type.id)}
-            >
-              <View style={[styles.typeIcon, { backgroundColor: `${type.color}20` }]}>
-                <IconComponent size={24} color={type.color} />
-              </View>
-              <Text style={[styles.typeLabel, isSelected && { color: type.color }]}>
-                {type.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+  const saveSettings = async (newSettings: any) => {
+    try {
+      const settings = {
+        notifications,
+        radius,
+        language,
+        theme,
+        ...newSettings,
+      };
+      await AsyncStorage.setItem('appSettings', JSON.stringify(settings));
+      console.log('Settings saved successfully');
+    } catch (error) {
+      console.error('Error saving settings:', error);
+    }
+  };
+
+  const handleNotificationChange = async (key: string, value: boolean) => {
+    const newNotifications = { ...notifications, [key]: value };
+    setNotifications(newNotifications);
+    await saveSettings({ notifications: newNotifications });
+  };
+
+  const handleRadiusChange = async (newRadius: number) => {
+    setRadius(newRadius);
+    await saveSettings({ radius: newRadius });
+  };
+
+  const handleLanguageChange = async (newLanguage: string) => {
+    setLanguage(newLanguage);
+    setShowLanguageModal(false);
+    await saveSettings({ language: newLanguage });
+    Alert.alert('Language Changed', `Language set to ${newLanguage}`);
+  };
+
+  const handleThemeChange = async (newTheme: string) => {
+    setTheme(newTheme);
+    setShowThemeModal(false);
+    await saveSettings({ theme: newTheme });
+    Alert.alert('Theme Changed', `Theme set to ${newTheme} mode`);
+  };
+
+  const handleSignOut = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign Out', style: 'destructive', onPress: signOut },
+      ]
     );
   };
 
-  if (!reportType) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>What would you like to report?</Text>
-          <Text style={styles.subtitle}>Help keep your community informed and safe</Text>
-        </View>
-
-        <View style={styles.optionsContainer}>
-          <TouchableOpacity
-            style={styles.optionCard}
-            onPress={() => setReportType('vibe')}
-          >
-            <LinearGradient
-              colors={['#4CAF50', '#45a049']}
-              style={styles.optionGradient}
-            >
-              <Heart size={32} color="#ffffff" />
-              <Text style={styles.optionTitle}>Report Vibe</Text>
-              <Text style={styles.optionDescription}>
-                Share positive experiences, safe areas, or community events
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.optionCard}
-            onPress={() => setReportType('event')}
-          >
-            <LinearGradient
-              colors={['#FF9800', '#f57c00']}
-              style={styles.optionGradient}
-            >
-              <AlertTriangle size={32} color="#ffffff" />
-              <Text style={styles.optionTitle}>Report Event</Text>
-              <Text style={styles.optionDescription}>
-                Report incidents, accidents, or situations that need attention
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+  const handleClearCache = () => {
+    Alert.alert(
+      'Clear Cache',
+      'This will clear all cached data. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear', style: 'destructive', onPress: () => {
+          Alert.alert('Success', 'Cache cleared successfully!');
+        }},
+      ]
     );
-  }
+  };
+
+  const radiusOptions = [1, 5, 10, 15, 20];
+  const languageOptions = ['English', 'Spanish', 'French', 'German'];
+  const themeOptions = ['Light', 'Dark', 'Auto'];
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setReportType(null)}
-          >
-            <Text style={styles.backButtonText}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>
-            Report {reportType === 'vibe' ? 'Vibe' : 'Event'}
-          </Text>
-          <Text style={styles.subtitle}>
-            {reportType === 'vibe' 
-              ? 'Share something positive happening around you'
-              : 'Report an incident or situation that needs attention'
-            }
-          </Text>
+          <Text style={styles.title}>Settings</Text>
+          <Text style={styles.subtitle}>Customize your HyperAPP experience</Text>
         </View>
 
-        <View style={styles.form}>
+        <View style={styles.content}>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Type *</Text>
-            {renderTypeSelection()}
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Description *</Text>
-            <TextInput
-              style={styles.textArea}
-              value={description}
-              onChangeText={setDescription}
-              placeholder={`Describe the ${reportType}...`}
-              placeholderTextColor="#8e8e93"
-              multiline
-              numberOfLines={4}
-            />
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Tags (optional)</Text>
-            <TextInput
-              style={styles.textInput}
-              value={tags}
-              onChangeText={setTags}
-              placeholder="e.g., music, safety, community"
-              placeholderTextColor="#8e8e93"
-            />
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Location</Text>
-            <View style={styles.locationContainer}>
-              <MapPin size={16} color="#8e8e93" />
-              <Text style={styles.locationText}>
-                {location 
-                  ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`
-                  : 'Location not available'
-                }
-              </Text>
+            <View style={styles.sectionHeader}>
+              <Bell size={20} color="#ff4757" />
+              <Text style={styles.sectionTitle}>Notifications</Text>
+            </View>
+            
+            <View style={styles.settingItem}>
+              <Text style={styles.settingLabel}>SOS Alerts</Text>
+              <Switch
+                value={notifications.sos}
+                onValueChange={(value) => handleNotificationChange('sos', value)}
+                trackColor={{ false: '#3e3e3e', true: '#ff4757' }}
+                thumbColor="#ffffff"
+              />
+            </View>
+            
+            <View style={styles.settingItem}>
+              <Text style={styles.settingLabel}>Vibe Updates</Text>
+              <Switch
+                value={notifications.vibes}
+                onValueChange={(value) => handleNotificationChange('vibes', value)}
+                trackColor={{ false: '#3e3e3e', true: '#ff4757' }}
+                thumbColor="#ffffff"
+              />
+            </View>
+            
+            <View style={styles.settingItem}>
+              <Text style={styles.settingLabel}>Event Reports</Text>
+              <Switch
+                value={notifications.events}
+                onValueChange={(value) => handleNotificationChange('events', value)}
+                trackColor={{ false: '#3e3e3e', true: '#ff4757' }}
+                thumbColor="#ffffff"
+              />
+            </View>
+            
+            <View style={styles.settingItem}>
+              <Text style={styles.settingLabel}>Nearby Users</Text>
+              <Switch
+                value={notifications.nearby}
+                onValueChange={(value) => handleNotificationChange('nearby', value)}
+                trackColor={{ false: '#3e3e3e', true: '#ff4757' }}
+                thumbColor="#ffffff"
+              />
             </View>
           </View>
 
-          <TouchableOpacity
-            style={styles.anonymousToggle}
-            onPress={() => setAnonymous(!anonymous)}
-          >
-            <View style={[styles.checkbox, anonymous && styles.checkboxChecked]}>
-              {anonymous && <Text style={styles.checkmark}>✓</Text>}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <MapPin size={20} color="#ff4757" />
+              <Text style={styles.sectionTitle}>Alert Radius</Text>
             </View>
-            <Text style={styles.anonymousText}>Report anonymously</Text>
-          </TouchableOpacity>
+            
+            <Text style={styles.sectionDescription}>
+              Set the distance for receiving alerts and notifications
+            </Text>
+            
+            <View style={styles.radiusContainer}>
+              {radiusOptions.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.radiusOption,
+                    radius === option && styles.radiusOptionSelected,
+                  ]}
+                  onPress={() => handleRadiusChange(option)}
+                >
+                  <Text
+                    style={[
+                      styles.radiusOptionText,
+                      radius === option && styles.radiusOptionTextSelected,
+                    ]}
+                  >
+                    {option}km
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
 
-          <TouchableOpacity
-            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-            onPress={handleSubmit}
-            disabled={loading}
-          >
-            <LinearGradient
-              colors={reportType === 'vibe' ? ['#4CAF50', '#45a049'] : ['#FF9800', '#f57c00']}
-              style={styles.submitGradient}
-            >
-              <Send size={16} color="#ffffff" />
-              <Text style={styles.submitButtonText}>
-                {loading ? 'Submitting...' : `Submit ${reportType === 'vibe' ? 'Vibe' : 'Event'}`}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Globe size={20} color="#ff4757" />
+              <Text style={styles.sectionTitle}>Language</Text>
+            </View>
+            
+            {languageOptions.map((option) => (
+              <TouchableOpacity
+                key={option}
+                style={styles.optionItem}
+                onPress={() => handleLanguageChange(option)}
+              >
+                <Text style={styles.optionLabel}>{option}</Text>
+                <View style={styles.optionRight}>
+                  {language === option && (
+                    <View style={styles.selectedDot} />
+                  )}
+                  <ChevronRight size={16} color="#8e8e93" />
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Palette size={20} color="#ff4757" />
+              <Text style={styles.sectionTitle}>Appearance</Text>
+            </View>
+            
+            {themeOptions.map((option) => (
+              <TouchableOpacity
+                key={option}
+                style={styles.optionItem}
+                onPress={() => handleThemeChange(option.toLowerCase())}
+              >
+                <Text style={styles.optionLabel}>{option} Mode</Text>
+                <View style={styles.optionRight}>
+                  {theme === option.toLowerCase() && (
+                    <View style={styles.selectedDot} />
+                  )}
+                  <ChevronRight size={16} color="#8e8e93" />
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Shield size={20} color="#ff4757" />
+              <Text style={styles.sectionTitle}>Privacy & Security</Text>
+            </View>
+            
+            <TouchableOpacity style={styles.optionItem}>
+              <Text style={styles.optionLabel}>Privacy Policy</Text>
+              <ChevronRight size={16} color="#8e8e93" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.optionItem}>
+              <Text style={styles.optionLabel}>Terms of Service</Text>
+              <ChevronRight size={16} color="#8e8e93" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.optionItem}>
+              <Text style={styles.optionLabel}>Data & Storage</Text>
+              <ChevronRight size={16} color="#8e8e93" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.section}>
+            <TouchableOpacity style={styles.dangerItem} onPress={handleClearCache}>
+              <Trash2 size={20} color="#ff4757" />
+              <Text style={styles.dangerLabel}>Clear Cache</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.dangerItem} onPress={handleSignOut}>
+              <LogOut size={20} color="#ff4757" />
+              <Text style={styles.dangerLabel}>Sign Out</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>HyperAPP v1.0.0</Text>
+            <Text style={styles.footerText}>Made with ❤️ for community safety</Text>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -275,171 +318,123 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
   },
-  backButton: {
-    alignSelf: 'flex-start',
-    marginBottom: 16,
-  },
-  backButtonText: {
-    color: '#ff4757',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 8,
-    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
     color: '#8e8e93',
     textAlign: 'center',
-    lineHeight: 22,
   },
-  optionsContainer: {
-    padding: 24,
-    gap: 16,
-  },
-  optionCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  optionGradient: {
-    padding: 24,
-    alignItems: 'center',
-    gap: 12,
-  },
-  optionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  optionDescription: {
-    fontSize: 14,
-    color: '#ffffff',
-    textAlign: 'center',
-    opacity: 0.9,
-    lineHeight: 20,
-  },
-  form: {
+  content: {
     padding: 24,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 32,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#ffffff',
-    marginBottom: 12,
-  },
-  typeGrid: {
+  sectionHeader: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginBottom: 16,
     gap: 12,
   },
-  typeCard: {
-    flex: 1,
-    minWidth: '45%',
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  sectionDescription: {
+    fontSize: 14,
+    color: '#8e8e93',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  settingItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 12,
     padding: 16,
+    marginBottom: 8,
+  },
+  settingLabel: {
+    fontSize: 16,
+    color: '#ffffff',
+  },
+  radiusContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  radiusOption: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    padding: 12,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  typeIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
+  radiusOptionSelected: {
+    backgroundColor: 'rgba(255, 71, 87, 0.2)',
+    borderColor: '#ff4757',
   },
-  typeLabel: {
-    fontSize: 12,
+  radiusOptionText: {
+    fontSize: 14,
     fontWeight: '600',
-    color: '#ffffff',
-    textAlign: 'center',
+    color: '#8e8e93',
   },
-  textInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: '#ffffff',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+  radiusOptionTextSelected: {
+    color: '#ff4757',
   },
-  textArea: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: '#ffffff',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  locationContainer: {
+  optionItem: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 12,
     padding: 16,
-    gap: 8,
+    marginBottom: 8,
   },
-  locationText: {
-    fontSize: 14,
-    color: '#8e8e93',
+  optionLabel: {
+    fontSize: 16,
+    color: '#ffffff',
   },
-  anonymousToggle: {
+  optionRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    gap: 8,
+  },
+  selectedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ff4757',
+  },
+  dangerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 71, 87, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
     gap: 12,
   },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: '#8e8e93',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: '#ff4757',
-    borderColor: '#ff4757',
-  },
-  checkmark: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  anonymousText: {
-    fontSize: 14,
-    color: '#ffffff',
-  },
-  submitButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    gap: 8,
-  },
-  submitButtonText: {
-    color: '#ffffff',
+  dangerLabel: {
     fontSize: 16,
+    color: '#ff4757',
     fontWeight: '600',
+  },
+  footer: {
+    alignItems: 'center',
+    marginTop: 32,
+    gap: 4,
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#8e8e93',
   },
 });
