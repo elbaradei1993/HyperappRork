@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocation } from '@/contexts/LocationContext';
 import { useAlerts } from '@/contexts/AlertContext';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Heart,
   AlertTriangle,
@@ -49,6 +50,7 @@ export default function ReportScreen() {
 
   const { location } = useLocation();
   const { addAlert } = useAlerts();
+  const { user } = useAuth();
 
   const handleSubmit = async () => {
     if (!selectedType || !description.trim()) {
@@ -75,6 +77,7 @@ export default function ReportScreen() {
         location,
         anonymous,
         reportType: reportType,
+        user_id: anonymous ? undefined : user?.id, // Use the current user ID or undefined if anonymous
       });
 
       Alert.alert('Success', `${reportType === 'vibe' ? 'Vibe' : 'Event'} reported successfully!`);
