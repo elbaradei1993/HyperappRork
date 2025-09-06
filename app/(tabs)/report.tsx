@@ -11,6 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocation } from '@/contexts/LocationContext';
 import { useAlerts } from '@/contexts/AlertContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { DatabaseService } from '@/services/database';
 import {
   Heart,
   AlertTriangle,
@@ -47,6 +49,7 @@ export default function ReportScreen() {
 
   const { location } = useLocation();
   const { addAlert } = useAlerts();
+  const { user } = useAuth();
 
   const handleSubmit = async () => {
     if (!selectedType || !description.trim()) {
@@ -66,6 +69,23 @@ export default function ReportScreen() {
 
     setLoading(true);
     try {
+      // Save to Supabase database
+      const alertData = {
+        type: selectedType,
+        description: description.trim(),
+        tags: tags.trim(),
+        location: {
+          latitude: location.latitude,
+          longitude: location.longitude,
+        },
+        anonymous,
+        report_type: reportType as 'vibe' | 'event' | 'sos',
+        user_id: anonymous ? undefined : user?.id,
+      };
+
+      await DatabaseService.createAlert(alertData);
+
+      // Also add to local context for immediate UI update
       await addAlert({
         type: selectedType,
         description: description.trim(),
@@ -84,7 +104,8 @@ export default function ReportScreen() {
       setTags('');
       setAnonymous(false);
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      console.error('Error submitting report:', error);
+      Alert.alert('Error', error.message || 'Failed to submit report');
     } finally {
       setLoading(false);
     }

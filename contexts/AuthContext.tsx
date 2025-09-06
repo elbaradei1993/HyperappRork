@@ -1,6 +1,7 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../lib/supabase';
+import { Session } from '@supabase/supabase-js';
 
 interface User {
   id: string;
@@ -17,6 +18,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
@@ -26,70 +28,92 @@ interface AuthContextType {
 
 export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(() => {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadStoredUser();
-  }, []);
-
-  const loadStoredUser = async () => {
-    try {
-      const storedUser = await AsyncStorage.getItem('user');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          user_metadata: session.user.user_metadata,
+        });
       }
-    } catch (error) {
-      console.error('Error loading stored user:', error);
-    } finally {
       setLoading(false);
-    }
-  };
+    });
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          user_metadata: session.user.user_metadata,
+        });
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
     try {
-      // Demo mode - accept any email/password for testing
-      console.log('Demo login for:', email);
-      
-      const mockUser: User = {
-        id: Date.now().toString(),
+      const { error } = await supabase.auth.signInWithPassword({
         email,
-        user_metadata: {
-          bio: 'Demo user for HyperAPP testing',
-          role: 'Individual',
-          interests: 'Safety, Community, Technology',
-          location: 'New York, NY',
-          displayName: email.split('@')[0],
-          phone: '',
-        },
-      };
+        password,
+      });
       
-      await AsyncStorage.setItem('user', JSON.stringify(mockUser));
-      setUser(mockUser);
-      console.log('Demo login successful');
+      if (error) {
+        console.error('Sign in error:', error);
+        throw new Error(error.message);
+      }
+      
+      console.log('Sign in successful');
     } catch (error) {
       console.error('Sign in error:', error);
-      throw new Error('Login failed');
+      throw error;
     }
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
     try {
-      console.log('Demo signup for user:', email);
-      // In demo mode, just show success message
-      // In real app, this would create account and require email verification
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      
+      if (error) {
+        console.error('Sign up error:', error);
+        throw new Error(error.message);
+      }
+      
+      console.log('Sign up successful - check email for verification');
     } catch (error) {
-      console.error('Signup error:', error);
-      throw new Error('Signup failed');
+      console.error('Sign up error:', error);
+      throw error;
     }
   }, []);
 
   const signOut = useCallback(async () => {
     try {
-      await AsyncStorage.removeItem('user');
-      setUser(null);
-      console.log('Demo logout successful');
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Sign out error:', error);
+        throw new Error(error.message);
+      }
+      console.log('Sign out successful');
     } catch (error) {
       console.error('Error signing out:', error);
+      throw error;
     }
   }, []);
 
@@ -97,29 +121,29 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(() => 
     try {
       if (!user) throw new Error('No user logged in');
       
-      const updatedUser = {
-        ...user,
-        user_metadata: {
-          ...user.user_metadata,
-          ...data,
-        },
-      };
+      const { error } = await supabase.auth.updateUser({
+        data: data,
+      });
       
-      await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
-      setUser(updatedUser);
-      console.log('Demo profile update successful');
+      if (error) {
+        console.error('Profile update error:', error);
+        throw new Error(error.message);
+      }
+      
+      console.log('Profile update successful');
     } catch (error) {
       console.error('Profile update error:', error);
-      throw new Error('Failed to update profile');
+      throw error;
     }
   }, [user]);
 
   return useMemo(() => ({
     user,
+    session,
     loading,
     signIn,
     signUp,
     signOut,
     updateProfile,
-  }), [user, loading, signIn, signUp, signOut, updateProfile]);
+  }), [user, session, loading, signIn, signUp, signOut, updateProfile]);
 });

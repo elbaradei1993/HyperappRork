@@ -1,21 +1,15 @@
-// Mock Supabase client for demo purposes - no network requests
-export const supabase = {
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = 'https://irbjqbmzohavhhdflsip.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlyYmpxYm16b2hhdmhoZGZsc2lwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyMzE1NDMsImV4cCI6MjA2NzgwNzU0M30.XS1bZySIL4MF9GI0oak_zYHKLE-1kmTEKmW7tJH0flw';
+
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    signInWithPassword: async () => ({ data: null, error: new Error('Demo mode - no real auth') }),
-    signUp: async () => ({ data: null, error: new Error('Demo mode - no real auth') }),
-    signOut: async () => ({ error: null }),
-    updateUser: async () => ({ error: new Error('Demo mode - no real auth') }),
-    getSession: async () => ({ data: { session: null }, error: null }),
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
   },
-  from: () => ({
-    select: () => ({
-      eq: () => ({ data: [], error: null }),
-      insert: () => ({ data: null, error: new Error('Demo mode - no real database') }),
-      update: () => ({ data: null, error: new Error('Demo mode - no real database') }),
-      delete: () => ({ data: null, error: new Error('Demo mode - no real database') }),
-    }),
-  }),
-};
+});
 
 // Database types
 export interface Database {

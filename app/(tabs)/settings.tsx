@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SupabaseTest } from '@/components/SupabaseTest';
 import {
   Bell,
   Globe,
@@ -293,6 +294,10 @@ export default function SettingsScreen() {
               <LogOut size={20} color="#ff4757" />
               <Text style={styles.dangerLabel}>Sign Out</Text>
             </TouchableOpacity>
+          </View>
+
+          <View style={styles.section}>
+            <SupabaseTest />
           </View>
 
           <View style={styles.footer}>
