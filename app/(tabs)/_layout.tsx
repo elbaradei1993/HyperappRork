@@ -1,11 +1,12 @@
-import { Tabs } from "expo-router";
-import { MapPin, User, Plus, Settings, Activity } from "lucide-react-native";
+import { Tabs, Redirect } from "expo-router";
+import { MapPin, User, Plus, Activity, Shield } from "lucide-react-native";
 import React from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Redirect } from "expo-router";
+import { useSettings } from "@/contexts/SettingsContext";
 
 export default function TabLayout() {
   const { user, loading } = useAuth();
+  const { t } = useSettings();
 
   if (loading) {
     return null;
@@ -31,38 +32,40 @@ export default function TabLayout() {
       <Tabs.Screen
         name="map"
         options={{
-          title: "Map",
+          title: t('map'),
           tabBarIcon: ({ color }) => <MapPin size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="pulse"
         options={{
-          title: "Pulse",
+          title: t('pulse'),
           tabBarIcon: ({ color }) => <Activity size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="report"
         options={{
-          title: "Report",
+          title: t('report'),
           tabBarIcon: ({ color }) => <Plus size={24} color={color} />,
         }}
       />
       <Tabs.Screen
+        name="guardians"
+        options={{
+          title: 'Guardians',
+          tabBarIcon: ({ color }) => <Shield size={24} color={color} />,
+        }}
+      />
+
+      <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
+          title: t('profile'),
           tabBarIcon: ({ color }) => <User size={24} color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: "Settings",
-          tabBarIcon: ({ color }) => <Settings size={24} color={color} />,
-        }}
-      />
+
     </Tabs>
   );
 }
