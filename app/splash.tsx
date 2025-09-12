@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Shield } from 'lucide-react-native';
+import { soundManager } from '@/utils/soundManager';
 
 const { width, height } = Dimensions.get('window');
 
@@ -18,6 +19,9 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    // Play splash sound - disabled temporarily for debugging
+    // soundManager.playSplashSound();
+
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -53,6 +57,8 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
     ).start();
 
     const timer = setTimeout(() => {
+      // Stop splash sound before transitioning - disabled temporarily for debugging
+      // soundManager.stopSound('splash');
       Animated.timing(fadeAnim, {
         toValue: 0,
         duration: 500,
@@ -60,7 +66,10 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
       }).start(() => onFinish());
     }, 3000);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      // soundManager.stopSound('splash'); // disabled temporarily for debugging
+    };
   }, [fadeAnim, scaleAnim, rotateAnim, pulseAnim, onFinish]);
 
   const spin = rotateAnim.interpolate({
