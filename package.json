@@ -3,13 +3,12 @@
 "main": "expo-router/entry",
 "version": "1.0.0",
 "scripts": {
-  "dev": "expo start --web",
-  "build": "expo export --platform web",
-  "start": "expo start --web",
-  "start-mobile": "bunx rork start -p 7m62cqgevutv1ew6e7u22 --tunnel",
+  "start": "bunx rork start -p 7m62cqgevutv1ew6e7u22 --tunnel",
   "start-web": "bunx rork start -p 7m62cqgevutv1ew6e7u22 --web --tunnel",
   "start-web-dev": "DEBUG=expo* bunx rork start -p 7m62cqgevutv1ew6e7u22 --web --tunnel",
-  "lint": "expo lint"
+  "lint": "expo lint",
+  "build": "expo export --platform web",
+  "vercel-build": "expo export --platform web --output-dir dist"
 },
 "dependencies": {
   "@expo/vector-icons": "^14.1.0",
