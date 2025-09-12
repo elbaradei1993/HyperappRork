@@ -1,21 +1,10 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { User as SupabaseUser } from '@supabase/supabase-js';
-
-interface User {
-  id: string;
-  email: string;
-  user_metadata?: {
-    bio?: string;
-    role?: string;
-    interests?: string;
-    location?: string;
-    displayName?: string;
-    phone?: string;
-    avatar_url?: string;
-  };
-}
+import { User } from '@supabase/supabase-js';
+import { authRateLimiter, SessionManager, validatePassword } from '@/utils/security';
+import { offlineManager } from '@/utils/offlineManager';
+import { AppState, AppStateStatus } from 'react-native';
 
 interface AuthContextType {
   user: User | null;
@@ -29,155 +18,239 @@ interface AuthContextType {
 export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(() => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const sessionManagerRef = useRef<SessionManager | null>(null);
+  const appStateRef = useRef(AppState.currentState);
 
   useEffect(() => {
-    // For development, set a default user - In production, this would check actual auth
-    const checkAuth = async () => {
-      try {
-        // Try to get session, but provide fallback for demo
-        const { data: { session } } = await supabase.auth.getSession();
+    // Get initial session
+    console.log('Checking for existing session...');
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('Error getting session:', error);
+      } else {
+        console.log('Session found:', session?.user?.email || 'No session');
         if (session?.user) {
-          setUser({
-            id: session.user.id,
-            email: session.user.email || '',
-            user_metadata: session.user.user_metadata,
+          // Initialize session manager for authenticated user
+          sessionManagerRef.current = new SessionManager(15, async () => {
+            console.log('Session timeout - signing out');
+            await signOut();
           });
-        } else {
-          // For demo purposes, create a default user
-          const { data: users } = await supabase
-            .from('users')
-            .select('*')
-            .limit(1);
-          
-          if (users && users.length > 0) {
-            setUser({
-              id: users[0].id,
-              email: users[0].email,
-              user_metadata: {
-                displayName: users[0].display_name,
-                bio: users[0].bio,
-                phone: users[0].phone,
-                avatar_url: users[0].avatar_url,
-              }
+          sessionManagerRef.current.startSession();
+        }
+      }
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setUser(session?.user ?? null);
+        setLoading(false);
+        
+        if (event === 'SIGNED_IN' && session?.user) {
+          // Start session manager
+          if (!sessionManagerRef.current) {
+            sessionManagerRef.current = new SessionManager(15, async () => {
+              console.log('Session timeout - signing out');
+              await signOut();
             });
           }
+          sessionManagerRef.current.startSession();
+        } else if (event === 'SIGNED_OUT') {
+          // Stop session manager
+          sessionManagerRef.current?.stopSession();
+          sessionManagerRef.current = null;
         }
-      } catch (error) {
-        console.error('Auth check error:', error);
-        // Still provide a demo user for functionality testing
-        setUser({
-          id: 'demo-user',
-          email: 'demo@hyperapp.com',
-          user_metadata: {
-            displayName: 'Demo User',
-            bio: 'Demo user for testing',
-          }
-        });
       }
-      setLoading(false);
-    };
+    );
 
-    checkAuth();
+    // Handle app state changes for session management
+    const appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
+        // App has come to foreground
+        sessionManagerRef.current?.resetTimer();
+      }
+      appStateRef.current = nextAppState;
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      appStateSubscription.remove();
+      sessionManagerRef.current?.stopSession();
+    };
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
+    // Check rate limiting
+    if (!authRateLimiter.canAttempt(email)) {
+      throw new Error('Too many login attempts. Please try again later.');
+    }
+    
     try {
+      console.log('Attempting to sign in with email:', email);
+      
+      // Check if offline
+      if (!offlineManager.getIsOnline()) {
+        throw new Error('No internet connection. Please check your network.');
+      }
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-
-      if (error) throw error;
-
-      if (data.user) {
-        setUser({
-          id: data.user.id,
-          email: data.user.email || '',
-          user_metadata: data.user.user_metadata,
-        });
+      
+      if (error) {
+        console.error('Supabase sign in error:', error);
+        throw error;
       }
+      
+      // Reset rate limiter on success
+      authRateLimiter.reset(email);
+      
+      console.log('Sign in successful:', data.user?.email);
     } catch (error: any) {
-      console.error('Sign in error:', error);
-      throw new Error(error.message || 'Login failed');
+      console.error('Sign in error details:', {
+        message: error.message,
+        status: error.status,
+        code: error.code,
+      });
+      throw new Error(error.message || 'Failed to sign in');
     }
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
+    // Validate password strength
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.isValid) {
+      throw new Error(passwordValidation.errors.join('\n'));
+    }
+    
+    // Check rate limiting
+    if (!authRateLimiter.canAttempt(email)) {
+      throw new Error('Too many signup attempts. Please try again later.');
+    }
+    
     try {
+      console.log('Attempting to sign up with email:', email);
+      
+      // Check if offline
+      if (!offlineManager.getIsOnline()) {
+        throw new Error('No internet connection. Please check your network.');
+      }
+      
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-      });
-
-      if (error) throw error;
-
-      if (data.user) {
-        // Create user profile in database
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert({
-            id: data.user.id,
-            email: data.user.email || '',
-            bio: '',
-            role: 'Individual',
-            interests: '',
-            location: '',
-            notification_preferences: {
-              sos: true,
-              vibes: true,
-              events: true,
-              nearby: false,
-            },
-          });
-
-        if (profileError) {
-          console.error('Profile creation error:', profileError);
+        options: {
+          emailRedirectTo: undefined, // No email confirmation required for testing
         }
+      });
+      
+      if (error) {
+        console.error('Supabase sign up error:', error);
+        throw error;
+      }
+      
+      // Reset rate limiter on success
+      authRateLimiter.reset(email);
+      
+      console.log('Sign up successful:', data.user?.email);
+      
+      // Auto sign in after signup if email confirmation is disabled
+      if (data.user && !data.session) {
+        console.log('Email confirmation may be required');
       }
     } catch (error: any) {
-      console.error('Signup error:', error);
-      throw new Error(error.message || 'Signup failed');
+      console.error('Signup error details:', {
+        message: error.message,
+        status: error.status,
+        code: error.code,
+      });
+      throw new Error(error.message || 'Failed to sign up');
     }
   }, []);
 
   const signOut = useCallback(async () => {
     try {
+      console.log('Starting sign out process...');
+      
+      // Stop session manager
+      sessionManagerRef.current?.stopSession();
+      sessionManagerRef.current = null;
+      
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase sign out error:', error);
+        throw error;
+      }
       setUser(null);
+      
+      // Clear offline cache on sign out
+      await offlineManager.clearAllCache();
+      
+      console.log('Sign out successful');
     } catch (error: any) {
       console.error('Error signing out:', error);
-      throw new Error(error.message || 'Sign out failed');
+      throw error;
     }
   }, []);
 
   const updateProfile = useCallback(async (data: any) => {
     try {
       if (!user) throw new Error('No user logged in');
-
-      // Update user metadata in auth
-      const { error: authError } = await supabase.auth.updateUser({
-        data: data,
-      });
-
-      if (authError) throw authError;
-
-      // Update profile in database
-      const { error: profileError } = await supabase
-        .from('users')
-        .update({
-          bio: data.bio,
-          role: data.role,
-          interests: data.interests,
-          location: data.location,
-        })
-        .eq('id', user.id);
-
-      if (profileError) {
-        console.error('Profile update error:', profileError);
+      
+      // Reset session timer on activity
+      sessionManagerRef.current?.resetTimer();
+      
+      // Check if offline - queue the update
+      if (!offlineManager.getIsOnline()) {
+        await offlineManager.queueAction('UPDATE_PROFILE', data);
+        
+        // Update local state optimistically
+        setUser({
+          ...user,
+          user_metadata: {
+            ...user.user_metadata,
+            ...data,
+          },
+        });
+        
+        console.log('Profile update queued for when online');
+        return;
       }
-
-      // Update local state
+      
+      // Update auth user metadata
+      const { error: authError } = await supabase.auth.updateUser({
+        data: {
+          displayName: data.displayName,
+          phone: data.phone,
+          firstName: data.firstName,
+          lastName: data.lastName,
+        },
+      });
+      if (authError) throw authError;
+      
+      // Also update the users table in database
+      if (data.firstName || data.lastName) {
+        const { error: dbError } = await (supabase as any)
+          .from('users')
+          .upsert({
+            id: user.id,
+            email: user.email || '',
+            first_name: data.firstName || data.first_name,
+            last_name: data.lastName || data.last_name,
+            display_name: data.displayName || `${data.firstName || ''} ${data.lastName || ''}`.trim(),
+            phone: data.phone,
+            updated_at: new Date().toISOString(),
+          });
+        
+        if (dbError) {
+          console.error('Error updating user in database:', dbError);
+        }
+      }
+      
+      // Update local user metadata
       setUser({
         ...user,
         user_metadata: {
@@ -185,9 +258,12 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(() => 
           ...data,
         },
       });
+      
+      // Cache the updated profile
+      await offlineManager.setCache(`profile_${user.id}`, data, 1440); // Cache for 24 hours
     } catch (error: any) {
       console.error('Profile update error:', error);
-      throw new Error(error.message || 'Failed to update profile');
+      throw new Error(error.message);
     }
   }, [user]);
 
