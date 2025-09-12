@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,16 +9,17 @@ import {
   Alert,
   Image,
   Platform,
-  Dimensions,
+  ActivityIndicator,
+  Switch,
 } from 'react-native';
-
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAlerts } from '@/contexts/AlertContext';
-import { supabase } from '@/lib/supabase';
+import { useSettings } from '@/contexts/SettingsContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   Camera, 
   Edit3,
-  Star,
   Award,
   ChevronRight,
   Settings,
@@ -27,40 +28,286 @@ import {
   LogOut,
   Bell,
   Lock,
-  CreditCard,
   Heart,
   AlertTriangle,
-  Users
+  Users,
+  MapPin,
+  Shield,
+  Phone,
+  User,
+  Calendar,
+  Check,
+  X
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/lib/supabase';
 
 
+
+interface ProfileData {
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  phone: string;
+  bio: string;
+  location: string;
+  birthDate: string;
+  emergencyContact: string;
+  emergencyContactName: string;
+  bloodType: string;
+  allergies: string;
+  medications: string;
+  profileImage: string | null;
+  notificationsEnabled: boolean;
+  locationSharingEnabled: boolean;
+  darkModeEnabled: boolean;
+  gender: string;
+  occupation: string;
+  company: string;
+  website: string;
+  socialMedia: {
+    twitter: string;
+    instagram: string;
+    linkedin: string;
+  };
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
+}
 
 export default function ProfileScreen() {
   const { user, updateProfile, signOut } = useAuth();
-  const { alerts } = useAlerts();
+  const { t, isDark } = useSettings();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
-  const [displayName, setDisplayName] = useState(user?.user_metadata?.displayName || user?.email?.split('@')[0] || 'User');
-  const [phone, setPhone] = useState(user?.user_metadata?.phone || '');
-  const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [rating] = useState(4.92);
-  const [totalTrips] = useState(127);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  
+  // Profile data state
+  const [profileData, setProfileData] = useState<ProfileData>({
+    firstName: '',
+    lastName: '',
+    displayName: '',
+    phone: '',
+    bio: '',
+    location: '',
+    birthDate: '',
+    emergencyContact: '',
+    emergencyContactName: '',
+    bloodType: '',
+    allergies: '',
+    medications: '',
+    profileImage: null,
+    notificationsEnabled: true,
+    locationSharingEnabled: true,
+    darkModeEnabled: false,
+    gender: '',
+    occupation: '',
+    company: '',
+    website: '',
+    socialMedia: {
+      twitter: '',
+      instagram: '',
+      linkedin: '',
+    },
+    address: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    country: '',
+  });
+  
+  // Stats from real data
+  const [stats, setStats] = useState({
+    vibesReported: 0,
+    eventsReported: 0,
+    sosReported: 0,
+    communityScore: 0,
+    totalReports: 0,
+    resolvedReports: 0,
+  });
+  
+  const [achievements, setAchievements] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
-  // Load profile image on mount
-  React.useEffect(() => {
-    loadProfileImage();
-  }, []);
+  // Load profile data on mount
+  useEffect(() => {
+    loadProfileData();
+    loadStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
-  const loadProfileImage = async () => {
+  const loadProfileData = async () => {
+    if (!user) return;
+    
+    setLoading(true);
     try {
-      const savedImage = await AsyncStorage.getItem('profileImage');
-      if (savedImage) {
-        setProfileImage(savedImage);
+      // Try to load from Supabase users table first
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single() as any;
+      
+      if (!error && userData) {
+        console.log('Loaded user profile from Supabase:', userData);
+        setProfileData(prev => ({
+          ...prev,
+          firstName: userData.first_name || '',
+          lastName: userData.last_name || '',
+          displayName: userData.display_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || user.email?.split('@')[0] || 'User',
+          phone: userData.phone || '',
+          bio: userData.bio || '',
+          location: userData.location || '',
+          birthDate: userData.birth_date || '',
+          emergencyContact: userData.emergency_contact || '',
+          emergencyContactName: userData.emergency_contact_name || '',
+          bloodType: userData.blood_type || '',
+          allergies: userData.allergies || '',
+          medications: userData.medications || '',
+          profileImage: userData.profile_image_url || null,
+          notificationsEnabled: userData.notifications_enabled ?? true,
+          locationSharingEnabled: userData.location_sharing_enabled ?? true,
+          darkModeEnabled: userData.dark_mode_enabled ?? false,
+          gender: userData.gender || '',
+          occupation: userData.occupation || '',
+          company: userData.company || '',
+          website: userData.website || '',
+          socialMedia: userData.social_media || {
+            twitter: '',
+            instagram: '',
+            linkedin: '',
+          },
+          address: userData.address || '',
+          city: userData.city || '',
+          state: userData.state || '',
+          zipCode: userData.zip_code || '',
+          country: userData.country || '',
+        }));
+      } else {
+        // Fallback to user metadata and AsyncStorage
+        const savedProfile = await AsyncStorage.getItem(`profile_${user.id}`);
+        if (savedProfile) {
+          const parsed = JSON.parse(savedProfile);
+          setProfileData(prev => ({ ...prev, ...parsed }));
+        }
+        
+        if (user.user_metadata) {
+          setProfileData(prev => ({
+            ...prev,
+            displayName: user.user_metadata.displayName || user.email?.split('@')[0] || 'User',
+            phone: user.user_metadata.phone || '',
+            bio: user.user_metadata.bio || '',
+            location: user.user_metadata.location || '',
+            birthDate: user.user_metadata.birthDate || '',
+            emergencyContact: user.user_metadata.emergencyContact || '',
+            emergencyContactName: user.user_metadata.emergencyContactName || '',
+            bloodType: user.user_metadata.bloodType || '',
+            allergies: user.user_metadata.allergies || '',
+            medications: user.user_metadata.medications || '',
+            profileImage: user.user_metadata.profile_image_url || null,
+          }));
+        }
       }
     } catch (error) {
-      console.error('Error loading profile image:', error);
+      console.error('Error loading profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const loadStats = async () => {
+    if (!user) return;
+    
+    try {
+      // Load real stats from Supabase
+      const { data: alerts, error: alertsError } = await supabase
+        .from('alerts')
+        .select('*')
+        .eq('user_id', user.id);
+      
+      if (!alertsError && alerts) {
+        const vibes = alerts.filter((a: any) => a.report_type === 'vibe').length;
+        const events = alerts.filter((a: any) => a.report_type === 'event').length;
+        const sos = alerts.filter((a: any) => a.report_type === 'sos').length;
+        const totalReports = alerts.length;
+        
+        // Count resolved reports (assuming resolved field exists or checking responded_by)
+        const resolved = alerts.filter((a: any) => a.resolved || a.responded_by).length;
+        
+        setStats({
+          vibesReported: vibes,
+          eventsReported: events,
+          sosReported: sos,
+          communityScore: Math.min(100, totalReports * 10),
+          totalReports: totalReports,
+          resolvedReports: resolved,
+        });
+        
+        // Set recent activity (last 5 alerts)
+        const recent = alerts
+          .sort((a: any, b: any) => {
+            const dateA = new Date(a.created_at || a.timestamp || 0).getTime();
+            const dateB = new Date(b.created_at || b.timestamp || 0).getTime();
+            return dateB - dateA;
+          })
+          .slice(0, 5);
+        setRecentActivity(recent);
+        
+        // Generate achievements based on real activity
+        const achievementsList = [];
+        if (vibes >= 1) {
+          achievementsList.push({ id: 'first_vibe', title: 'First Vibe', description: 'Shared your first vibe' });
+        }
+        if (vibes >= 5) {
+          achievementsList.push({ id: 'vibe5', title: 'Vibe Reporter', description: 'Reported 5 vibes' });
+        }
+        if (vibes >= 10) {
+          achievementsList.push({ id: 'vibe10', title: 'Vibe Master', description: 'Reported 10 vibes' });
+        }
+        if (events >= 1) {
+          achievementsList.push({ id: 'first_event', title: 'Event Spotter', description: 'Reported your first event' });
+        }
+        if (events >= 5) {
+          achievementsList.push({ id: 'event5', title: 'Event Watcher', description: 'Reported 5 events' });
+        }
+        if (sos >= 1) {
+          achievementsList.push({ id: 'helper', title: 'Community Helper', description: 'Used SOS feature' });
+        }
+        if (totalReports >= 20) {
+          achievementsList.push({ id: 'active', title: 'Active Member', description: '20+ total reports' });
+        }
+        setAchievements(achievementsList);
+      } else {
+        // No alerts yet - set everything to zero
+        setStats({
+          vibesReported: 0,
+          eventsReported: 0,
+          sosReported: 0,
+          communityScore: 0,
+          totalReports: 0,
+          resolvedReports: 0,
+        });
+        setRecentActivity([]);
+        setAchievements([]);
+      }
+    } catch (error) {
+      console.error('Error loading stats:', error);
+      // Reset to empty state on error
+      setStats({
+        vibesReported: 0,
+        eventsReported: 0,
+        sosReported: 0,
+        communityScore: 0,
+        totalReports: 0,
+        resolvedReports: 0,
+      });
+      setRecentActivity([]);
+      setAchievements([]);
     }
   };
 
@@ -69,58 +316,22 @@ export default function ProfileScreen() {
       if (Platform.OS !== 'web') {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permission Required', 'Sorry, we need camera roll permissions to change your profile picture.');
+          Alert.alert(t('permissionRequired'), t('permissionMessage'));
           return;
         }
       }
 
       Alert.alert(
-        'Change Profile Picture',
-        'Choose an option',
+        t('changePhoto'),
+        t('selectOption'),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Camera', onPress: () => openCamera() },
-          { text: 'Photo Library', onPress: () => openImageLibrary() },
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('camera'), onPress: () => openCamera() },
+          { text: t('gallery'), onPress: () => openImageLibrary() },
         ]
       );
     } catch (error) {
       console.error('Error requesting permissions:', error);
-    }
-  };
-
-  const uploadImageToSupabase = async (imageUri: string) => {
-    try {
-      if (!user?.id) throw new Error('User not authenticated');
-
-      // Convert image to blob for upload
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-
-      // Create unique filename
-      const fileName = `${user.id}/profile-${Date.now()}.jpg`;
-
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, blob, {
-          contentType: 'image/jpeg',
-          upsert: true,
-        });
-
-      if (error) throw error;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName);
-
-      // Update user metadata with avatar URL
-      await updateProfile({ avatar_url: publicUrl });
-
-      return publicUrl;
-    } catch (error: any) {
-      console.error('Error uploading image:', error);
-      throw new Error(error.message || 'Failed to upload image');
     }
   };
 
@@ -129,7 +340,7 @@ export default function ProfileScreen() {
       if (Platform.OS !== 'web') {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permission Required', 'Sorry, we need camera permissions to take a photo.');
+          Alert.alert(t('permissionRequired'), t('permissionMessage'));
           return;
         }
       }
@@ -143,17 +354,7 @@ export default function ProfileScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const imageUri = result.assets[0].uri;
-        setProfileImage(imageUri);
-
-        try {
-          const publicUrl = await uploadImageToSupabase(imageUri);
-          setProfileImage(publicUrl);
-          Alert.alert('Success', 'Profile picture updated!');
-        } catch (error: any) {
-          Alert.alert('Error', error.message);
-          // Fallback to local storage
-          await AsyncStorage.setItem('profileImage', imageUri);
-        }
+        await uploadImage(imageUri);
       }
     } catch (error) {
       console.error('Error opening camera:', error);
@@ -172,17 +373,7 @@ export default function ProfileScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const imageUri = result.assets[0].uri;
-        setProfileImage(imageUri);
-
-        try {
-          const publicUrl = await uploadImageToSupabase(imageUri);
-          setProfileImage(publicUrl);
-          Alert.alert('Success', 'Profile picture updated!');
-        } catch (error: any) {
-          Alert.alert('Error', error.message);
-          // Fallback to local storage
-          await AsyncStorage.setItem('profileImage', imageUri);
-        }
+        await uploadImage(imageUri);
       }
     } catch (error) {
       console.error('Error opening image library:', error);
@@ -190,133 +381,368 @@ export default function ProfileScreen() {
     }
   };
 
+  const uploadImage = async (imageUri: string) => {
+    if (!user) return;
+    
+    try {
+      setSaving(true);
+      
+      // For web, we'll use the data URI directly
+      // For mobile, upload to Supabase Storage
+      if (Platform.OS === 'web' || imageUri.startsWith('data:')) {
+        // Use data URI directly for web
+        setProfileData(prev => ({ ...prev, profileImage: imageUri }));
+        
+        // Save to database
+        const { error } = await supabase
+          .from('users')
+          .upsert({
+            id: user.id,
+            email: user.email || '',
+            profile_image_url: imageUri,
+            updated_at: new Date().toISOString(),
+          } as any);
+        
+        if (error) {
+          console.error('Database update error:', error);
+          throw error;
+        }
+        
+        await updateProfile({ profile_image_url: imageUri });
+        Alert.alert(t('success'), t('profileUpdated'));
+      } else {
+        // For mobile, upload to Supabase Storage
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
+        
+        // Generate unique filename
+        const fileName = `${user.id}_${Date.now()}.jpg`;
+        
+        // Upload to Supabase Storage
+        const { error: uploadError } = await supabase.storage
+          .from('profile-images')
+          .upload(fileName, blob, {
+            contentType: 'image/jpeg',
+            upsert: true,
+          });
+        
+        if (uploadError) {
+          console.error('Storage upload error:', uploadError);
+          // Fallback to base64
+          const reader = new FileReader();
+          reader.readAsDataURL(blob);
+          reader.onloadend = async () => {
+            const base64data = reader.result as string;
+            setProfileData(prev => ({ ...prev, profileImage: base64data }));
+            
+            const { error } = await supabase
+              .from('users')
+              .upsert({
+                id: user.id,
+                email: user.email || '',
+                profile_image_url: base64data,
+                updated_at: new Date().toISOString(),
+              } as any);
+            
+            if (!error) {
+              await updateProfile({ profile_image_url: base64data });
+              Alert.alert(t('success'), t('profileUpdated'));
+            }
+          };
+          return;
+        }
+        
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('profile-images')
+          .getPublicUrl(fileName);
+        
+        setProfileData(prev => ({ ...prev, profileImage: publicUrl }));
+        
+        // Save URL to database
+        const { error } = await supabase
+          .from('users')
+          .upsert({
+            id: user.id,
+            email: user.email || '',
+            profile_image_url: publicUrl,
+            updated_at: new Date().toISOString(),
+          } as any);
+        
+        if (error) {
+          console.error('Database update error:', error);
+          throw error;
+        }
+        
+        await updateProfile({ profile_image_url: publicUrl });
+        Alert.alert(t('success'), t('profileUpdated'));
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      Alert.alert(t('error'), t('profileUpdateError'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     try {
+      setSaving(true);
+      
+      if (!user) {
+        Alert.alert(t('error'), 'No user logged in');
+        return;
+      }
+      
+      // Try to update or insert into Supabase users table
+      // Update display name to include first and last name if not manually set
+      const displayName = profileData.displayName || `${profileData.firstName} ${profileData.lastName}`.trim();
+      
+      const { error: upsertError } = await (supabase as any)
+        .from('users')
+        .upsert({
+          id: user.id,
+          email: user.email,
+          first_name: profileData.firstName,
+          last_name: profileData.lastName,
+          display_name: displayName,
+          phone: profileData.phone,
+          bio: profileData.bio,
+          location: profileData.location,
+          birth_date: profileData.birthDate,
+          emergency_contact: profileData.emergencyContact,
+          emergency_contact_name: profileData.emergencyContactName,
+          blood_type: profileData.bloodType,
+          allergies: profileData.allergies,
+          medications: profileData.medications,
+          profile_image_url: profileData.profileImage,
+          notifications_enabled: profileData.notificationsEnabled,
+          location_sharing_enabled: profileData.locationSharingEnabled,
+          dark_mode_enabled: profileData.darkModeEnabled,
+          gender: profileData.gender,
+          occupation: profileData.occupation,
+          company: profileData.company,
+          website: profileData.website,
+          social_media: profileData.socialMedia,
+          address: profileData.address,
+          city: profileData.city,
+          state: profileData.state,
+          zip_code: profileData.zipCode,
+          country: profileData.country,
+          updated_at: new Date().toISOString(),
+        });
+      
+      if (upsertError) {
+        console.error('Error updating user profile in Supabase:', upsertError);
+        // Fallback to AsyncStorage
+        await AsyncStorage.setItem(`profile_${user.id}`, JSON.stringify(profileData));
+      }
+      
+      // Also update auth metadata
       await updateProfile({
-        displayName,
-        phone,
+        displayName: profileData.displayName,
+        phone: profileData.phone,
+        bio: profileData.bio,
+        location: profileData.location,
+        birthDate: profileData.birthDate,
+        emergencyContact: profileData.emergencyContact,
+        emergencyContactName: profileData.emergencyContactName,
+        bloodType: profileData.bloodType,
+        allergies: profileData.allergies,
+        medications: profileData.medications,
       });
+      
       setEditing(false);
-      Alert.alert('Success', 'Profile updated successfully!');
+      Alert.alert(t('success'), t('profileUpdated'));
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      Alert.alert(t('error'), error.message);
+    } finally {
+      setSaving(false);
     }
+  };
+  
+  const handleCancel = () => {
+    loadProfileData();
+    setEditing(false);
   };
 
   const handleSignOut = () => {
     Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
+      t('signOut'),
+      t('areYouSureSignOut'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign Out', onPress: () => signOut(), style: 'destructive' },
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('signOut'), style: 'destructive', onPress: () => signOut() },
       ]
     );
   };
 
-  const formatDate = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
-    if (diffInHours < 1) return 'Just now';
-    if (diffInHours < 24) return `${diffInHours} hours ago`;
-    const diffInDays = Math.floor(diffInHours / 24);
-    if (diffInDays < 7) return `${diffInDays} days ago`;
-    return date.toLocaleDateString();
-  };
 
-  // Calculate real stats from alerts
-  const stats = {
-    vibesReported: alerts.filter(alert => alert.reportType === 'vibe').length,
-    eventsReported: alerts.filter(alert => alert.reportType === 'event').length,
-    communityScore: 89,
-    helpProvided: Math.floor(alerts.length * 0.6),
+
+  // Navigation handlers for menu items
+  const handleNotifications = () => {
+    router.push('/notifications');
+  };
+  
+  const handlePrivacySecurity = () => {
+    router.push('/privacy-security' as any);
+  };
+  
+  const handlePaymentMethods = () => {
+    router.push('/payment-methods' as any);
+  };
+  
+  const handleSavedPlaces = () => {
+    router.push('/saved-places' as any);
+  };
+  
+  const handleAchievements = () => {
+    router.push('/achievements' as any);
+  };
+  
+  const handleTrustedContacts = () => {
+    router.push('/trusted-contacts' as any);
+  };
+  
+  const handleHelpSupport = () => {
+    router.push('/help-support' as any);
+  };
+  
+  const handleTermsPolicies = () => {
+    router.push('/terms-policies' as any);
+  };
+  
+  const handleSettings = () => {
+    router.push('/settings' as any);
   };
 
   const menuSections = [
     {
-      title: 'Account',
+      title: t('account'),
       items: [
-        { icon: Bell, label: 'Notifications', onPress: () => Alert.alert('Coming Soon', 'Notifications settings coming soon!') },
-        { icon: Lock, label: 'Privacy & Security', onPress: () => Alert.alert('Coming Soon', 'Privacy settings coming soon!') },
-        { icon: CreditCard, label: 'Payment Methods', onPress: () => Alert.alert('Coming Soon', 'Payment methods coming soon!') },
+        { 
+          icon: Bell, 
+          label: t('notifications'), 
+          onPress: handleNotifications 
+        },
+        { icon: Lock, label: t('privacySecurity'), onPress: handlePrivacySecurity },
+        { icon: MapPin, label: t('savedPlaces'), onPress: handleSavedPlaces },
       ]
     },
     {
-      title: 'Community',
+      title: t('community'),
       items: [
-        { icon: Heart, label: 'Saved Places', onPress: () => Alert.alert('Coming Soon', 'Saved places coming soon!') },
-        { icon: Award, label: 'Achievements', onPress: () => Alert.alert('Coming Soon', 'Achievements coming soon!') },
-        { icon: Users, label: 'Trusted Contacts', onPress: () => Alert.alert('Coming Soon', 'Trusted contacts coming soon!') },
+        { 
+          icon: Award, 
+          label: t('achievements'), 
+          onPress: handleAchievements 
+        },
+        { 
+          icon: Users, 
+          label: t('trustedContacts'), 
+          onPress: handleTrustedContacts 
+        },
       ]
     },
     {
-      title: 'Support',
+      title: t('support'),
       items: [
-        { icon: HelpCircle, label: 'Help & Support', onPress: () => Alert.alert('Help', 'Contact support@hyperapp.com') },
-        { icon: FileText, label: 'Terms & Policies', onPress: () => Alert.alert('Coming Soon', 'Terms & Policies coming soon!') },
-        { icon: Settings, label: 'Settings', onPress: () => Alert.alert('Coming Soon', 'Settings coming soon!') },
+        { icon: HelpCircle, label: t('helpSupport'), onPress: handleHelpSupport },
+        { icon: FileText, label: t('termsPolicies'), onPress: handleTermsPolicies },
+        { icon: Settings, label: t('settings'), onPress: handleSettings },
       ]
     },
   ];
 
-  // Get recent alerts for history
-  const recentHistory = alerts
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 5)
-    .map(alert => ({
-      id: alert.id,
-      type: alert.reportType,
-      title: alert.description || `${alert.type} reported`,
-      date: formatDate(alert.timestamp),
-      location: `${alert.location.latitude.toFixed(3)}, ${alert.location.longitude.toFixed(3)}`,
-    }));
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#000000" />
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isDark && styles.containerDark]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header Section */}
-        <View style={styles.header}>
+        <View style={[styles.header, isDark && styles.headerDark, { paddingTop: insets.top + 20 }]}>
           <View style={styles.profileSection}>
-            <TouchableOpacity onPress={handleImagePicker} style={styles.avatarContainer}>
-              <Image
-                source={{
-                  uri: profileImage || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face'
-                }}
-                style={styles.avatarImage}
-              />
-              <View style={styles.cameraButton}>
-                <Camera size={14} color="#ffffff" />
-              </View>
+            <TouchableOpacity 
+              onPress={editing ? handleImagePicker : undefined} 
+              style={[styles.avatarContainer, editing && styles.avatarEditing]}
+              disabled={!editing}
+            >
+              {profileData.profileImage ? (
+                <Image
+                  source={{ uri: profileData.profileImage }}
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <View style={[styles.avatarImage, styles.avatarPlaceholder, isDark && styles.avatarPlaceholderDark]}>
+                  <User size={40} color={isDark ? "#666" : "#8e8e93"} />
+                </View>
+              )}
+              {editing && (
+                <View style={[styles.cameraButton, isDark && styles.cameraButtonDark]}>
+                  <Camera size={14} color="#ffffff" />
+                </View>
+              )}
             </TouchableOpacity>
             
             <View style={styles.profileInfo}>
               {editing ? (
                 <TextInput
                   style={styles.nameInput}
-                  value={displayName}
-                  onChangeText={setDisplayName}
-                  placeholder="Your name"
+                  value={profileData.displayName || `${profileData.firstName} ${profileData.lastName}`.trim()}
+                  onChangeText={(text) => setProfileData(prev => ({ ...prev, displayName: text }))}
+                  placeholder={t('displayName')}
                   placeholderTextColor="#8e8e93"
                 />
               ) : (
-                <Text style={styles.name}>{displayName}</Text>
+                <Text style={[styles.name, isDark && styles.nameDark]}>
+                  {profileData.firstName && profileData.lastName 
+                    ? `${profileData.firstName} ${profileData.lastName}`
+                    : profileData.displayName || t('user')}
+                </Text>
               )}
               
-              <View style={styles.ratingContainer}>
-                <Star size={14} color="#FFD700" fill="#FFD700" />
-                <Text style={styles.rating}>{rating}</Text>
-                <Text style={styles.ratingCount}>({totalTrips} reports)</Text>
-              </View>
+              <Text style={[styles.email, isDark && styles.emailDark]}>{user?.email}</Text>
+              
+              {!editing && profileData.bio && (
+                <Text style={[styles.bio, isDark && styles.bioDark]} numberOfLines={2}>{profileData.bio}</Text>
+              )}
             </View>
             
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => editing ? handleSave() : setEditing(true)}
-            >
-              <Edit3 size={18} color="#000000" />
-            </TouchableOpacity>
+            {!editing ? (
+              <TouchableOpacity
+                style={[styles.editButton, isDark && styles.editButtonDark]}
+                onPress={() => setEditing(true)}
+              >
+                <Edit3 size={18} color={isDark ? "#ffffff" : "#000000"} />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.editActions}>
+                <TouchableOpacity
+                  style={[styles.editActionButton, styles.cancelButton, isDark && styles.cancelButtonDark]}
+                  onPress={handleCancel}
+                  disabled={saving}
+                >
+                  <X size={18} color={isDark ? "#999" : "#666666"} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.editActionButton, styles.saveButton]}
+                  onPress={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <Check size={18} color="#ffffff" />
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
 
@@ -327,15 +753,15 @@ export default function ProfileScreen() {
             style={styles.statCard}
           >
             <Text style={styles.statNumber}>{stats.vibesReported}</Text>
-            <Text style={styles.statLabel}>Vibes Shared</Text>
+            <Text style={styles.statLabel}>{t('vibesShared')}</Text>
           </LinearGradient>
           
           <LinearGradient
             colors={['#2196F3', '#42A5F5']}
             style={styles.statCard}
           >
-            <Text style={styles.statNumber}>{stats.communityScore}</Text>
-            <Text style={styles.statLabel}>Community Score</Text>
+            <Text style={styles.statNumber}>{stats.totalReports}</Text>
+            <Text style={styles.statLabel}>{t('totalReports')}</Text>
           </LinearGradient>
           
           <LinearGradient
@@ -343,27 +769,582 @@ export default function ProfileScreen() {
             style={styles.statCard}
           >
             <Text style={styles.statNumber}>{stats.eventsReported}</Text>
-            <Text style={styles.statLabel}>Events Reported</Text>
+            <Text style={styles.statLabel}>{t('eventsReported')}</Text>
           </LinearGradient>
         </View>
 
-        {/* Personal Info */}
-        {editing && (
-          <View style={styles.personalInfo}>
-            <Text style={styles.sectionTitle}>Personal Information</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValue}>{user?.email}</Text>
+        {/* Personal Information Section - Always visible with enhanced design */}
+        <View style={[styles.personalInfoCard, isDark && styles.personalInfoCardDark]}>
+          <LinearGradient
+            colors={['#6C63FF', '#5A52E0']}
+            style={styles.personalInfoHeader}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View style={styles.personalInfoTitleRow}>
+              <User size={20} color="#ffffff" />
+              <Text style={styles.personalInfoTitle}>{t('personalInformation')}</Text>
             </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Phone</Text>
-              <TextInput
-                style={styles.infoInput}
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="Add phone number"
-                placeholderTextColor="#8e8e93"
-                keyboardType="phone-pad"
+            {!editing && (
+              <TouchableOpacity
+                style={styles.personalInfoEditButton}
+                onPress={() => setEditing(true)}
+              >
+                <Edit3 size={16} color="#ffffff" />
+              </TouchableOpacity>
+            )}
+          </LinearGradient>
+          
+          <View style={styles.personalInfoContent}>
+            {/* Display Mode - Always visible */}
+            {!editing ? (
+              <View style={styles.personalInfoGrid}>
+                <View style={styles.personalInfoItem}>
+                  <View style={styles.personalInfoIconWrapper}>
+                    <User size={16} color="#6C63FF" />
+                  </View>
+                  <View style={styles.personalInfoTextWrapper}>
+                    <Text style={[styles.personalInfoLabel, isDark && styles.personalInfoLabelDark]}>{t('fullName')}</Text>
+                    <Text style={[styles.personalInfoValue, isDark && styles.personalInfoValueDark]}>
+                      {profileData.firstName && profileData.lastName 
+                        ? `${profileData.firstName} ${profileData.lastName}`
+                        : profileData.displayName || t('notSet')}
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.personalInfoItem}>
+                  <View style={styles.personalInfoIconWrapper}>
+                    <Phone size={16} color="#6C63FF" />
+                  </View>
+                  <View style={styles.personalInfoTextWrapper}>
+                    <Text style={[styles.personalInfoLabel, isDark && styles.personalInfoLabelDark]}>{t('phone')}</Text>
+                    <Text style={[styles.personalInfoValue, isDark && styles.personalInfoValueDark]}>
+                      {profileData.phone || t('notSet')}
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.personalInfoItem}>
+                  <View style={styles.personalInfoIconWrapper}>
+                    <MapPin size={16} color="#6C63FF" />
+                  </View>
+                  <View style={styles.personalInfoTextWrapper}>
+                    <Text style={[styles.personalInfoLabel, isDark && styles.personalInfoLabelDark]}>{t('location')}</Text>
+                    <Text style={[styles.personalInfoValue, isDark && styles.personalInfoValueDark]}>
+                      {profileData.city && profileData.country 
+                        ? `${profileData.city}, ${profileData.country}`
+                        : profileData.location || t('notSet')}
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.personalInfoItem}>
+                  <View style={styles.personalInfoIconWrapper}>
+                    <Calendar size={16} color="#6C63FF" />
+                  </View>
+                  <View style={styles.personalInfoTextWrapper}>
+                    <Text style={[styles.personalInfoLabel, isDark && styles.personalInfoLabelDark]}>{t('birthDate')}</Text>
+                    <Text style={[styles.personalInfoValue, isDark && styles.personalInfoValueDark]}>
+                      {profileData.birthDate || t('notSet')}
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.personalInfoItem}>
+                  <View style={styles.personalInfoIconWrapper}>
+                    <Shield size={16} color="#6C63FF" />
+                  </View>
+                  <View style={styles.personalInfoTextWrapper}>
+                    <Text style={[styles.personalInfoLabel, isDark && styles.personalInfoLabelDark]}>{t('emergencyContact')}</Text>
+                    <Text style={[styles.personalInfoValue, isDark && styles.personalInfoValueDark]}>
+                      {profileData.emergencyContactName || t('notSet')}
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.personalInfoItem}>
+                  <View style={styles.personalInfoIconWrapper}>
+                    <Heart size={16} color="#6C63FF" />
+                  </View>
+                  <View style={styles.personalInfoTextWrapper}>
+                    <Text style={[styles.personalInfoLabel, isDark && styles.personalInfoLabelDark]}>{t('bloodType')}</Text>
+                    <Text style={[styles.personalInfoValue, isDark && styles.personalInfoValueDark]}>
+                      {profileData.bloodType || t('notSet')}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              /* Edit Mode */
+              <View style={styles.personalInfoEditMode}>
+            
+                <Text style={styles.editSectionTitle}>{t('basicInformation')}</Text>
+                
+                <View style={styles.editFieldGroup}>
+                  <View style={styles.editField}>
+                    <View style={styles.editFieldLabel}>
+                      <User size={14} color="#6C63FF" />
+                      <Text style={styles.editFieldLabelText}>{t('firstName')} *</Text>
+                    </View>
+                    <TextInput
+                      style={styles.editFieldInput}
+                      value={profileData.firstName}
+                      onChangeText={(text) => setProfileData(prev => ({ ...prev, firstName: text }))}
+                      placeholder={t('enterFirstName')}
+                      placeholderTextColor="#999999"
+                    />
+                  </View>
+                  
+                  <View style={styles.editField}>
+                    <View style={styles.editFieldLabel}>
+                      <User size={14} color="#6C63FF" />
+                      <Text style={styles.editFieldLabelText}>{t('lastName')} *</Text>
+                    </View>
+                    <TextInput
+                      style={styles.editFieldInput}
+                      value={profileData.lastName}
+                      onChangeText={(text) => setProfileData(prev => ({ ...prev, lastName: text }))}
+                      placeholder={t('enterLastName')}
+                      placeholderTextColor="#999999"
+                    />
+                  </View>
+                </View>
+            
+                <View style={styles.editField}>
+                  <View style={styles.editFieldLabel}>
+                    <User size={14} color="#6C63FF" />
+                    <Text style={styles.editFieldLabelText}>{t('gender')}</Text>
+                  </View>
+                  <TextInput
+                    style={styles.editFieldInput}
+                    value={profileData.gender}
+                    onChangeText={(text) => setProfileData(prev => ({ ...prev, gender: text }))}
+                    placeholder={t('selectGender')}
+                    placeholderTextColor="#999999"
+                  />
+                </View>
+            
+                <View style={styles.editField}>
+                  <View style={styles.editFieldLabel}>
+                    <FileText size={14} color="#6C63FF" />
+                    <Text style={styles.editFieldLabelText}>{t('bio')}</Text>
+                  </View>
+                  <TextInput
+                    style={[styles.editFieldInput, styles.editFieldTextArea]}
+                    value={profileData.bio}
+                    onChangeText={(text) => setProfileData(prev => ({ ...prev, bio: text }))}
+                    placeholder={t('tellAboutYourself')}
+                    placeholderTextColor="#999999"
+                    multiline
+                    maxLength={150}
+                  />
+                  <Text style={styles.characterCount}>{profileData.bio.length}/150</Text>
+                </View>
+            
+                <View style={styles.editField}>
+                  <View style={styles.editFieldLabel}>
+                    <Phone size={14} color="#6C63FF" />
+                    <Text style={styles.editFieldLabelText}>{t('phoneNumber')}</Text>
+                  </View>
+                  <TextInput
+                    style={styles.editFieldInput}
+                    value={profileData.phone}
+                    onChangeText={(text) => setProfileData(prev => ({ ...prev, phone: text }))}
+                    placeholder="+1 (555) 123-4567"
+                    placeholderTextColor="#999999"
+                    keyboardType="phone-pad"
+                  />
+                </View>
+            
+                <View style={styles.editField}>
+                  <View style={styles.editFieldLabel}>
+                    <MapPin size={14} color="#6C63FF" />
+                    <Text style={styles.editFieldLabelText}>{t('location')}</Text>
+                  </View>
+                  <TextInput
+                    style={styles.editFieldInput}
+                    value={profileData.location}
+                    onChangeText={(text) => setProfileData(prev => ({ ...prev, location: text }))}
+                    placeholder="City, Country"
+                    placeholderTextColor="#999999"
+                  />
+                </View>
+            
+                <View style={styles.editField}>
+                  <View style={styles.editFieldLabel}>
+                    <Calendar size={14} color="#6C63FF" />
+                    <Text style={styles.editFieldLabelText}>{t('birthDate')}</Text>
+                  </View>
+                  <TextInput
+                    style={styles.editFieldInput}
+                    value={profileData.birthDate}
+                    onChangeText={(text) => setProfileData(prev => ({ ...prev, birthDate: text }))}
+                    placeholder="MM/DD/YYYY"
+                    placeholderTextColor="#999999"
+                  />
+                </View>
+            
+                <Text style={[styles.editSectionTitle, { marginTop: 24 }]}>{t('emergencyInformation')}</Text>
+            
+                <View style={styles.editField}>
+                  <View style={styles.editFieldLabel}>
+                    <Shield size={14} color="#6C63FF" />
+                    <Text style={styles.editFieldLabelText}>{t('emergencyContactName')}</Text>
+                  </View>
+                  <TextInput
+                    style={styles.editFieldInput}
+                    value={profileData.emergencyContactName}
+                    onChangeText={(text) => setProfileData(prev => ({ ...prev, emergencyContactName: text }))}
+                    placeholder={t('contactName')}
+                    placeholderTextColor="#999999"
+                  />
+                </View>
+            
+                <View style={styles.editField}>
+                  <View style={styles.editFieldLabel}>
+                    <Phone size={14} color="#6C63FF" />
+                    <Text style={styles.editFieldLabelText}>{t('emergencyPhone')}</Text>
+                  </View>
+                  <TextInput
+                    style={styles.editFieldInput}
+                    value={profileData.emergencyContact}
+                    onChangeText={(text) => setProfileData(prev => ({ ...prev, emergencyContact: text }))}
+                    placeholder={t('emergencyPhoneNumber')}
+                    placeholderTextColor="#999999"
+                    keyboardType="phone-pad"
+                  />
+                </View>
+            
+                <View style={styles.editFieldGroup}>
+                  <View style={styles.editField}>
+                    <View style={styles.editFieldLabel}>
+                      <Heart size={14} color="#6C63FF" />
+                      <Text style={styles.editFieldLabelText}>{t('bloodType')}</Text>
+                    </View>
+                    <TextInput
+                      style={styles.editFieldInput}
+                      value={profileData.bloodType}
+                      onChangeText={(text) => setProfileData(prev => ({ ...prev, bloodType: text }))}
+                      placeholder="e.g., O+"
+                      placeholderTextColor="#999999"
+                    />
+                  </View>
+            
+                  <View style={styles.editField}>
+                    <View style={styles.editFieldLabel}>
+                      <AlertTriangle size={14} color="#6C63FF" />
+                      <Text style={styles.editFieldLabelText}>{t('allergies')}</Text>
+                    </View>
+                    <TextInput
+                      style={styles.editFieldInput}
+                      value={profileData.allergies}
+                      onChangeText={(text) => setProfileData(prev => ({ ...prev, allergies: text }))}
+                      placeholder={t('listAnyAllergies')}
+                      placeholderTextColor="#999999"
+                    />
+                  </View>
+                </View>
+            
+                <View style={styles.editField}>
+                  <View style={styles.editFieldLabel}>
+                    <Heart size={14} color="#6C63FF" />
+                    <Text style={styles.editFieldLabelText}>{t('currentMedications')}</Text>
+                  </View>
+                  <TextInput
+                    style={[styles.editFieldInput, styles.editFieldTextArea]}
+                    value={profileData.medications}
+                    onChangeText={(text) => setProfileData(prev => ({ ...prev, medications: text }))}
+                    placeholder={t('listCurrentMedications')}
+                    placeholderTextColor="#999999"
+                    multiline
+                  />
+                </View>
+            
+                <Text style={[styles.editSectionTitle, { marginTop: 24 }]}>{t('professionalInformation')}</Text>
+            
+                <View style={styles.editFieldGroup}>
+                  <View style={styles.editField}>
+                    <View style={styles.editFieldLabel}>
+                      <User size={14} color="#6C63FF" />
+                      <Text style={styles.editFieldLabelText}>{t('occupation')}</Text>
+                    </View>
+                    <TextInput
+                      style={styles.editFieldInput}
+                      value={profileData.occupation}
+                      onChangeText={(text) => setProfileData(prev => ({ ...prev, occupation: text }))}
+                      placeholder={t('yourOccupation')}
+                      placeholderTextColor="#999999"
+                    />
+                  </View>
+                  
+                  <View style={styles.editField}>
+                    <View style={styles.editFieldLabel}>
+                      <Users size={14} color="#6C63FF" />
+                      <Text style={styles.editFieldLabelText}>{t('company')}</Text>
+                    </View>
+                    <TextInput
+                      style={styles.editFieldInput}
+                      value={profileData.company}
+                      onChangeText={(text) => setProfileData(prev => ({ ...prev, company: text }))}
+                      placeholder={t('companyName')}
+                      placeholderTextColor="#999999"
+                    />
+                  </View>
+                </View>
+            
+                <View style={styles.editField}>
+                  <View style={styles.editFieldLabel}>
+                    <FileText size={14} color="#6C63FF" />
+                    <Text style={styles.editFieldLabelText}>{t('website')}</Text>
+                  </View>
+                  <TextInput
+                    style={styles.editFieldInput}
+                    value={profileData.website}
+                    onChangeText={(text) => setProfileData(prev => ({ ...prev, website: text }))}
+                    placeholder="https://example.com"
+                    placeholderTextColor="#999999"
+                    keyboardType="url"
+                    autoCapitalize="none"
+                  />
+                </View>
+            
+                <Text style={[styles.editSectionTitle, { marginTop: 24 }]}>{t('addressInformation')}</Text>
+            
+                <View style={styles.editField}>
+                  <View style={styles.editFieldLabel}>
+                    <MapPin size={14} color="#6C63FF" />
+                    <Text style={styles.editFieldLabelText}>{t('streetAddress')}</Text>
+                  </View>
+                  <TextInput
+                    style={styles.editFieldInput}
+                    value={profileData.address}
+                    onChangeText={(text) => setProfileData(prev => ({ ...prev, address: text }))}
+                    placeholder="123 Main St"
+                    placeholderTextColor="#999999"
+                  />
+                </View>
+            
+                <View style={styles.editFieldGroup}>
+                  <View style={styles.editField}>
+                    <View style={styles.editFieldLabel}>
+                      <MapPin size={14} color="#6C63FF" />
+                      <Text style={styles.editFieldLabelText}>{t('city')}</Text>
+                    </View>
+                    <TextInput
+                      style={styles.editFieldInput}
+                      value={profileData.city}
+                      onChangeText={(text) => setProfileData(prev => ({ ...prev, city: text }))}
+                      placeholder={t('city')}
+                      placeholderTextColor="#999999"
+                    />
+                  </View>
+                  
+                  <View style={styles.editField}>
+                    <View style={styles.editFieldLabel}>
+                      <MapPin size={14} color="#6C63FF" />
+                      <Text style={styles.editFieldLabelText}>{t('stateProvince')}</Text>
+                    </View>
+                    <TextInput
+                      style={styles.editFieldInput}
+                      value={profileData.state}
+                      onChangeText={(text) => setProfileData(prev => ({ ...prev, state: text }))}
+                      placeholder={t('state')}
+                      placeholderTextColor="#999999"
+                    />
+                  </View>
+                </View>
+            
+                <View style={styles.editFieldGroup}>
+                  <View style={styles.editField}>
+                    <View style={styles.editFieldLabel}>
+                      <MapPin size={14} color="#6C63FF" />
+                      <Text style={styles.editFieldLabelText}>{t('zipPostalCode')}</Text>
+                    </View>
+                    <TextInput
+                      style={styles.editFieldInput}
+                      value={profileData.zipCode}
+                      onChangeText={(text) => setProfileData(prev => ({ ...prev, zipCode: text }))}
+                      placeholder="12345"
+                      placeholderTextColor="#999999"
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  
+                  <View style={styles.editField}>
+                    <View style={styles.editFieldLabel}>
+                      <MapPin size={14} color="#6C63FF" />
+                      <Text style={styles.editFieldLabelText}>{t('country')}</Text>
+                    </View>
+                    <TextInput
+                      style={styles.editFieldInput}
+                      value={profileData.country}
+                      onChangeText={(text) => setProfileData(prev => ({ ...prev, country: text }))}
+                      placeholder={t('country')}
+                      placeholderTextColor="#999999"
+                    />
+                  </View>
+                </View>
+            
+                <Text style={[styles.editSectionTitle, { marginTop: 24 }]}>{t('socialMedia')}</Text>
+            
+                <View style={styles.editFieldGroup}>
+                  <View style={styles.editField}>
+                    <View style={styles.editFieldLabel}>
+                      <FileText size={14} color="#6C63FF" />
+                      <Text style={styles.editFieldLabelText}>Twitter/X</Text>
+                    </View>
+                    <TextInput
+                      style={styles.editFieldInput}
+                      value={profileData.socialMedia.twitter}
+                      onChangeText={(text) => setProfileData(prev => ({ 
+                        ...prev, 
+                        socialMedia: { ...prev.socialMedia, twitter: text }
+                      }))}
+                      placeholder="@username"
+                      placeholderTextColor="#999999"
+                      autoCapitalize="none"
+                    />
+                  </View>
+                  
+                  <View style={styles.editField}>
+                    <View style={styles.editFieldLabel}>
+                      <Camera size={14} color="#6C63FF" />
+                      <Text style={styles.editFieldLabelText}>Instagram</Text>
+                    </View>
+                    <TextInput
+                      style={styles.editFieldInput}
+                      value={profileData.socialMedia.instagram}
+                      onChangeText={(text) => setProfileData(prev => ({ 
+                        ...prev, 
+                        socialMedia: { ...prev.socialMedia, instagram: text }
+                      }))}
+                      placeholder="@username"
+                      placeholderTextColor="#999999"
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </View>
+                
+                <View style={styles.editField}>
+                  <View style={styles.editFieldLabel}>
+                    <Users size={14} color="#6C63FF" />
+                    <Text style={styles.editFieldLabelText}>LinkedIn</Text>
+                  </View>
+                  <TextInput
+                    style={styles.editFieldInput}
+                    value={profileData.socialMedia.linkedin}
+                    onChangeText={(text) => setProfileData(prev => ({ 
+                      ...prev, 
+                      socialMedia: { ...prev.socialMedia, linkedin: text }
+                    }))}
+                    placeholder="linkedin.com/in/username"
+                    placeholderTextColor="#999999"
+                    autoCapitalize="none"
+                  />
+                </View>
+                
+                <View style={styles.editButtonsContainer}>
+                  <TouchableOpacity
+                    style={styles.editCancelButton}
+                    onPress={handleCancel}
+                    disabled={saving}
+                  >
+                    <Text style={styles.editCancelButtonText}>{t('cancel')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.editSaveButton}
+                    onPress={handleSave}
+                    disabled={saving}
+                  >
+                    {saving ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={styles.editSaveButtonText}>{t('saveChanges')}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+        
+        {/* Quick Settings - Always visible */}
+        {!editing && (
+          <View style={[styles.quickSettings, isDark && styles.quickSettingsDark]}>
+            <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>{t('quickSettings')}</Text>
+            
+            <View style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <Bell size={20} color={isDark ? "#ffffff" : "#000000"} />
+                <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>{t('notifications')}</Text>
+              </View>
+              <Switch
+                value={profileData.notificationsEnabled}
+                onValueChange={async (value) => {
+                  console.log('Toggling notifications to:', value);
+                  const newData = { ...profileData, notificationsEnabled: value };
+                  setProfileData(newData);
+                  
+                  // Save to AsyncStorage immediately
+                  await AsyncStorage.setItem(`profile_${user?.id}`, JSON.stringify(newData));
+                  
+                  // Save to Supabase
+                  if (user) {
+                    try {
+                      await supabase
+                        .from('users')
+                        .upsert({
+                          id: user.id,
+                          email: user.email || '',
+                          notifications_enabled: value,
+                          updated_at: new Date().toISOString(),
+                        } as any);
+                      console.log('Notifications setting saved to database');
+                    } catch (error) {
+                      console.error('Error saving notifications setting:', error);
+                    }
+                  }
+                }}
+                trackColor={{ false: '#767577', true: '#4CAF50' }}
+                thumbColor={profileData.notificationsEnabled ? '#ffffff' : '#f4f3f4'}
+              />
+            </View>
+            
+            <View style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <MapPin size={20} color={isDark ? "#ffffff" : "#000000"} />
+                <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>{t('locationSharing')}</Text>
+              </View>
+              <Switch
+                value={profileData.locationSharingEnabled}
+                onValueChange={async (value) => {
+                  console.log('Toggling location sharing to:', value);
+                  const newData = { ...profileData, locationSharingEnabled: value };
+                  setProfileData(newData);
+                  
+                  // Save to AsyncStorage immediately
+                  await AsyncStorage.setItem(`profile_${user?.id}`, JSON.stringify(newData));
+                  
+                  // Save to Supabase
+                  if (user) {
+                    try {
+                      await supabase
+                        .from('users')
+                        .upsert({
+                          id: user.id,
+                          email: user.email || '',
+                          location_sharing_enabled: value,
+                          updated_at: new Date().toISOString(),
+                        } as any);
+                      console.log('Location sharing setting saved to database');
+                    } catch (error) {
+                      console.error('Error saving location sharing setting:', error);
+                    }
+                  }
+                }}
+                trackColor={{ false: '#767577', true: '#4CAF50' }}
+                thumbColor={profileData.locationSharingEnabled ? '#ffffff' : '#f4f3f4'}
               />
             </View>
           </View>
@@ -371,23 +1352,24 @@ export default function ProfileScreen() {
 
         {/* Menu Sections */}
         {menuSections.map((section, index) => (
-          <View key={index} style={styles.menuSection}>
-            <Text style={styles.menuSectionTitle}>{section.title}</Text>
+          <View key={index} style={[styles.menuSection, isDark && styles.menuSectionDark]}>
+            <Text style={[styles.menuSectionTitle, isDark && styles.menuSectionTitleDark]}>{section.title}</Text>
             {section.items.map((item, itemIndex) => {
               const IconComponent = item.icon;
               return (
                 <TouchableOpacity
                   key={itemIndex}
-                  style={styles.menuItem}
+                  style={[styles.menuItem, isDark && styles.menuItemDark]}
                   onPress={item.onPress}
                 >
                   <View style={styles.menuItemLeft}>
-                    <View style={styles.menuIconContainer}>
-                      <IconComponent size={20} color="#000000" />
+                    <View style={[styles.menuIconContainer, isDark && styles.menuIconContainerDark]}>
+                      <IconComponent size={20} color={isDark ? "#ffffff" : "#000000"} />
                     </View>
-                    <Text style={styles.menuItemText}>{item.label}</Text>
+                    <Text style={[styles.menuItemText, isDark && styles.menuItemTextDark]}>{item.label}</Text>
+
                   </View>
-                  <ChevronRight size={20} color="#8e8e93" />
+                  <ChevronRight size={20} color={isDark ? "#666" : "#8e8e93"} />
                 </TouchableOpacity>
               );
             })}
@@ -395,32 +1377,51 @@ export default function ProfileScreen() {
         ))}
 
         {/* Recent Activity */}
-        <View style={styles.activitySection}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          {recentHistory.length > 0 ? (
-            recentHistory.slice(0, 3).map((item) => (
-              <View key={item.id} style={styles.activityItem}>
-                <View style={styles.activityIcon}>
-                  {item.type === 'vibe' && <Heart size={16} color="#4CAF50" />}
-                  {item.type === 'event' && <AlertTriangle size={16} color="#FF9800" />}
+        <View style={[styles.activitySection, isDark && styles.activitySectionDark]}>
+          <View style={styles.activityHeader}>
+            <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>{t('recentActivity')}</Text>
+            {recentActivity.length > 3 && (
+              <TouchableOpacity onPress={() => router.push('/activity-history' as any)}>
+                <Text style={styles.viewAllText}>{t('viewAll')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {recentActivity.length > 0 ? (
+            recentActivity.slice(0, 3).map((item) => (
+              <TouchableOpacity 
+                key={item.id} 
+                style={[styles.activityItem, isDark && styles.activityItemDark]}
+                onPress={() => router.push(`/alert-details/${item.id}` as any)}
+              >
+                <View style={[styles.activityIcon, isDark && styles.activityIconDark]}>
+                  {item.report_type === 'vibe' && <Heart size={16} color="#4CAF50" />}
+                  {item.report_type === 'event' && <AlertTriangle size={16} color="#FF9800" />}
+                  {item.report_type === 'sos' && <Shield size={16} color="#FF0000" />}
                 </View>
                 <View style={styles.activityContent}>
-                  <Text style={styles.activityTitle} numberOfLines={1}>{item.title}</Text>
-                  <Text style={styles.activityDate}>{item.date}</Text>
+                  <Text style={[styles.activityTitle, isDark && styles.activityTitleDark]} numberOfLines={1}>
+                    {item.alert_type || item.description || `${item.report_type} report`}
+                  </Text>
+                  <Text style={[styles.activityDate, isDark && styles.activityDateDark]}>
+                    {new Date(item.created_at || item.timestamp).toLocaleDateString()}
+                  </Text>
                 </View>
-              </View>
+                <ChevronRight size={16} color={isDark ? "#666" : "#8e8e93"} />
+              </TouchableOpacity>
             ))
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No activity yet</Text>
+              <AlertTriangle size={32} color={isDark ? "#666" : "#8e8e93"} />
+              <Text style={[styles.emptyStateText, isDark && styles.emptyStateTextDark]}>{t('noActivityYet')}</Text>
+              <Text style={[styles.emptyStateSubtext, isDark && styles.emptyStateSubtextDark]}>{t('reportsWillAppearHere')}</Text>
             </View>
           )}
         </View>
 
         {/* Sign Out Button */}
-        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+        <TouchableOpacity style={[styles.signOutButton, isDark && styles.signOutButtonDark]} onPress={handleSignOut}>
           <LogOut size={20} color="#ff4757" />
-          <Text style={styles.signOutText}>Sign Out</Text>
+          <Text style={styles.signOutText}>{t('signOut')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -428,20 +1429,30 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f7f7f7',
+    backgroundColor: '#FAFBFD',
+  },
+  containerDark: {
+    backgroundColor: '#000000',
   },
   scrollView: {
     flex: 1,
   },
   header: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    backgroundColor: 'transparent',
+    paddingHorizontal: 24,
+    paddingBottom: 32,
+    borderBottomWidth: 0,
+    borderBottomColor: 'transparent',
+  },
+  headerDark: {
+    backgroundColor: 'transparent',
+    borderBottomColor: 'transparent',
   },
   profileSection: {
     flexDirection: 'row',
@@ -450,10 +1461,21 @@ const styles = StyleSheet.create({
   avatarContainer: {
     position: 'relative',
   },
+  avatarEditing: {
+    opacity: 0.8,
+  },
   avatarImage: {
     width: 80,
     height: 80,
     borderRadius: 40,
+  },
+  avatarPlaceholder: {
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarPlaceholderDark: {
+    backgroundColor: '#1f1f1f',
   },
   cameraButton: {
     position: 'absolute',
@@ -468,15 +1490,40 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#ffffff',
   },
+  cameraButtonDark: {
+    backgroundColor: '#ffffff',
+    borderColor: '#141414',
+  },
   profileInfo: {
     flex: 1,
     marginLeft: 16,
   },
+  email: {
+    fontSize: 14,
+    color: '#8e8e93',
+    marginTop: 2,
+  },
+  emailDark: {
+    color: '#666',
+  },
+  bio: {
+    fontSize: 14,
+    color: '#666666',
+    marginTop: 4,
+    lineHeight: 20,
+  },
+  bioDark: {
+    color: '#999',
+  },
   name: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#000000',
-    marginBottom: 4,
+    fontSize: 28,
+    fontWeight: '300',
+    color: '#1C1C1E',
+    marginBottom: 6,
+    letterSpacing: -0.8,
+  },
+  nameDark: {
+    color: '#FFFFFF',
   },
   nameInput: {
     fontSize: 24,
@@ -509,17 +1556,45 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  editButtonDark: {
+    backgroundColor: '#2a2a2a',
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editActionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#f0f0f0',
+  },
+  cancelButtonDark: {
+    backgroundColor: '#2a2a2a',
+  },
+  saveButton: {
+    backgroundColor: '#4CAF50',
+  },
   statsContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 20,
     gap: 12,
   },
   statCard: {
     flex: 1,
-    padding: 16,
-    borderRadius: 12,
+    padding: 18,
+    borderRadius: 20,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 3,
   },
   statNumber: {
     fontSize: 28,
@@ -533,11 +1608,165 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     textAlign: 'center',
   },
-  personalInfo: {
-    backgroundColor: '#ffffff',
-    marginTop: 12,
+  personalInfoCard: {
+    marginTop: 20,
+    marginHorizontal: 24,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 24,
+    elevation: 4,
+    overflow: 'hidden',
+  },
+  personalInfoCardDark: {
+    backgroundColor: '#1C1C1E',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+  },
+  personalInfoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
+  },
+  personalInfoTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  personalInfoTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  personalInfoEditButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  personalInfoContent: {
+    padding: 20,
+  },
+  personalInfoGrid: {
+    gap: 16,
+  },
+  personalInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  personalInfoIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F3F2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  personalInfoTextWrapper: {
+    flex: 1,
+  },
+  personalInfoLabel: {
+    fontSize: 12,
+    color: '#8e8e93',
+    marginBottom: 2,
+  },
+  personalInfoLabelDark: {
+    color: '#666',
+  },
+  personalInfoValue: {
+    fontSize: 15,
+    color: '#000000',
+    fontWeight: '600',
+  },
+  personalInfoValueDark: {
+    color: '#ffffff',
+  },
+  personalInfoEditMode: {
+    gap: 16,
+  },
+  editSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6C63FF',
+    marginBottom: 12,
+  },
+  editFieldGroup: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  editField: {
+    flex: 1,
+    marginBottom: 16,
+  },
+  editFieldLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  editFieldLabelText: {
+    fontSize: 13,
+    color: '#666666',
+    fontWeight: '500',
+  },
+  editFieldInput: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#000000',
+    backgroundColor: '#FAFAFA',
+  },
+  editFieldTextArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+    paddingTop: 12,
+  },
+  characterCount: {
+    fontSize: 11,
+    color: '#8e8e93',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  editButtonsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+  },
+  editCancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    alignItems: 'center',
+  },
+  editCancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666666',
+  },
+  editSaveButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#6C63FF',
+    alignItems: 'center',
+  },
+  editSaveButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
   },
   infoRow: {
     flexDirection: 'row',
@@ -546,6 +1775,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+  },
+  infoLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   infoLabel: {
     fontSize: 14,
@@ -562,19 +1796,39 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 20,
   },
+  bioInput: {
+    minHeight: 60,
+    textAlignVertical: 'top',
+    paddingTop: 4,
+  },
   menuSection: {
-    backgroundColor: '#ffffff',
-    marginTop: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    backgroundColor: '#FFFFFF',
+    marginTop: 20,
+    marginHorizontal: 24,
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  menuSectionDark: {
+    backgroundColor: '#1C1C1E',
+    shadowOpacity: 0.15,
   },
   menuSectionTitle: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#8e8e93',
     textTransform: 'uppercase',
     marginTop: 8,
-    marginBottom: 8,
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  menuSectionTitleDark: {
+    color: '#666',
   },
   menuItem: {
     flexDirection: 'row',
@@ -582,30 +1836,75 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  menuItemDark: {
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
   menuItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
+    flex: 1,
+  },
+  badge: {
+    backgroundColor: '#FF0000',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 8,
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '600',
   },
   menuIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f0f0f0',
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: 'rgba(108, 99, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
+  menuIconContainerDark: {
+    backgroundColor: 'rgba(108, 99, 255, 0.2)',
+  },
   menuItemText: {
-    fontSize: 16,
-    color: '#000000',
+    fontSize: 17,
+    color: '#1C1C1E',
+    fontWeight: '400',
+  },
+  menuItemTextDark: {
+    color: '#FFFFFF',
   },
   activitySection: {
-    backgroundColor: '#ffffff',
-    marginTop: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    marginTop: 20,
+    marginHorizontal: 24,
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  activitySectionDark: {
+    backgroundColor: '#1C1C1E',
+    shadowOpacity: 0.15,
+  },
+  activityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: '600',
   },
   sectionTitle: {
     fontSize: 18,
@@ -613,58 +1912,127 @@ const styles = StyleSheet.create({
     color: '#000000',
     marginBottom: 16,
   },
+  sectionTitleDark: {
+    color: '#ffffff',
+  },
   activityItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  activityItemDark: {
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
   activityIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f0f0f0',
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(108, 99, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 14,
+  },
+  activityIconDark: {
+    backgroundColor: 'rgba(108, 99, 255, 0.2)',
   },
   activityContent: {
     flex: 1,
   },
   activityTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: '#000000',
     marginBottom: 2,
+  },
+  activityTitleDark: {
+    color: '#ffffff',
   },
   activityDate: {
     fontSize: 12,
     color: '#8e8e93',
   },
+  activityDateDark: {
+    color: '#666',
+  },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: 32,
   },
   emptyStateText: {
+    fontSize: 16,
+    color: '#000000',
+    fontWeight: '600',
+    marginTop: 12,
+  },
+  emptyStateTextDark: {
+    color: '#ffffff',
+  },
+  emptyStateSubtext: {
     fontSize: 14,
     color: '#8e8e93',
+    marginTop: 4,
+  },
+  emptyStateSubtextDark: {
+    color: '#666',
+  },
+  quickSettings: {
+    backgroundColor: '#FFFFFF',
+    marginTop: 20,
+    marginHorizontal: 24,
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  quickSettingsDark: {
+    backgroundColor: '#1C1C1E',
+    shadowOpacity: 0.15,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  settingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  settingLabel: {
+    fontSize: 16,
+    color: '#000000',
+    fontWeight: '500',
+  },
+  settingLabelDark: {
+    color: '#ffffff',
   },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    marginTop: 12,
-    marginBottom: 24,
-    marginHorizontal: 20,
-    paddingVertical: 16,
-    borderRadius: 12,
-    gap: 8,
+    backgroundColor: 'rgba(255, 59, 48, 0.08)',
+    marginTop: 24,
+    marginBottom: 40,
+    marginHorizontal: 24,
+    paddingVertical: 18,
+    borderRadius: 20,
+    gap: 10,
+  },
+  signOutButtonDark: {
+    backgroundColor: 'rgba(255, 59, 48, 0.12)',
   },
   signOutText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#ff4757',
+    fontSize: 17,
+    fontWeight: '500',
+    color: '#FF3B30',
   },
 });
