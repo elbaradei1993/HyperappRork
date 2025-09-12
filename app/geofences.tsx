@@ -335,7 +335,7 @@ export default function GeofencesScreen() {
 
       const isInside = distance <= geofence.radius_meters;
       const wasInside = geofenceStates[geofence.id] ?? false;
-      const vibe = geofence.vibe || 'monitored';
+      const vibe = geofence.vibe || 'safe';
       const now = Date.now();
       const lastNotification = lastNotificationTime.current[geofence.id] || 0;
 
@@ -356,13 +356,13 @@ export default function GeofencesScreen() {
         saveGeofenceEvents(updatedEvents);
 
         if (isInside && geofence.alert_on_enter) {
-          const stateText = getStateDisplayText(geofence.state || null, geofence.country || null);
+          const stateText = getStateDisplayText(geofence.state ?? null, geofence.country ?? null);
           sendNotification(
             `Entered ${geofence.name}`,
             `You've entered the ${vibe} zone: ${geofence.name} in ${stateText}`
           );
         } else if (!isInside && geofence.alert_on_exit) {
-          const stateText = getStateDisplayText(geofence.state || null, geofence.country || null);
+          const stateText = getStateDisplayText(geofence.state ?? null, geofence.country ?? null);
           sendNotification(
             `Left ${geofence.name}`,
             `You've left the ${vibe} zone: ${geofence.name} in ${stateText}`
@@ -448,7 +448,7 @@ export default function GeofencesScreen() {
               {(item.state || item.country) && (
                 <View style={styles.stateInfo}>
                   <Text style={styles.stateText}>
-                    {getStateIcon(item.country || null)} {getStateDisplayText(item.state || null, item.country || null)}
+                    {getStateIcon(item.country ?? null)} {getStateDisplayText(item.state ?? null, item.country ?? null)}
                   </Text>
                 </View>
               )}

@@ -21,20 +21,20 @@ args = "HyperAPP Web Server"
 name = "HyperAPP Web Server"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "EXPO_NO_TELEMETRY=1 EXPO_NO_WEB_SETUP=1 bun run start-web"
 waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
 
 [[ports]]
 localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 5001
+localPort = 44975
 externalPort = 3000
 
 [deployment]
