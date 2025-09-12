@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "hyperapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "privacy": "public",
     "splash": {
       "image": "./assets/images/splash-icon.png",
@@ -17,6 +17,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.rork.hyperapp-location-social-emergency",
+      "buildNumber": "1",
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow $(PRODUCT_NAME) to use your location.",
         "NSLocationAlwaysUsageDescription": "Allow $(PRODUCT_NAME) to use your location.",
@@ -33,15 +34,7 @@
       },
       "accessesContactNotes": true,
       "entitlements": {
-        "com": {
-          "apple": {
-            "developer": {
-              "networking": {
-                "wifi-info": true
-              }
-            }
-          }
-        }
+        "com.apple.developer.networking.wifi-info": true
       }
     },
     "android": {
@@ -50,6 +43,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "app.rork.hyperapp-location-social-emergency",
+      "versionCode": 1,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
@@ -57,8 +51,8 @@
         "FOREGROUND_SERVICE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
         "RECORD_AUDIO",
         "android.permission.VIBRATE",
         "READ_CONTACTS",

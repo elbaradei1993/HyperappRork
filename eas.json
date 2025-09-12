@@ -15,10 +15,12 @@
     },
     "production": {
       "ios": {
-        "distribution": "store"
+        "distribution": "store",
+        "autoIncrement": true
       },
       "android": {
-        "buildType": "aab"
+        "buildType": "aab",
+        "autoIncrement": true
       }
     }
   },
