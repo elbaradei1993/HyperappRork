@@ -620,6 +620,8 @@ export interface Database {
           is_active: boolean
           notification_message: string | null
           vibe: string | null
+          state: string | null
+          country: string | null
           created_at: string
           updated_at: string
         }
@@ -635,6 +637,8 @@ export interface Database {
           is_active?: boolean
           notification_message?: string | null
           vibe?: string | null
+          state?: string | null
+          country?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -650,6 +654,8 @@ export interface Database {
           is_active?: boolean
           notification_message?: string | null
           vibe?: string | null
+          state?: string | null
+          country?: string | null
           created_at?: string
           updated_at?: string
         }
