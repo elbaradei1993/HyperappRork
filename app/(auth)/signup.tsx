@@ -12,7 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { Shield, MapPin } from 'lucide-react-native';
+import { Shield, MapPin, ArrowLeft } from 'lucide-react-native';
 
 export default function SignupScreen() {
   const [email, setEmail] = useState('');
@@ -55,6 +55,13 @@ export default function SignupScreen() {
         colors={['#1a1a2e', '#16213e', '#0f3460']}
         style={styles.gradient}
       >
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <ArrowLeft size={24} color="#fff" />
+        </TouchableOpacity>
+        
         <View style={styles.content}>
           <View style={styles.header}>
             <View style={styles.logoContainer}>
@@ -125,6 +132,13 @@ const styles = StyleSheet.create({
   },
   gradient: {
     flex: 1,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 1,
+    padding: 10,
   },
   content: {
     flex: 1,
