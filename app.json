@@ -1,13 +1,14 @@
 {
   "expo": {
     "name": "HyperAPP",
-    "slug": "Stay Safe...Saty Connected",
+    "slug": "hyperapp-safety-social",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "hyperapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "privacy": "public",
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
