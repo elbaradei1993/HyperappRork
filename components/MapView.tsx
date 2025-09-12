@@ -1,18 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, Text, Alert as RNAlert, TouchableOpacity, PanResponder, Animated, Platform, Dimensions } from 'react-native';
-import { Users, ZoomIn, ZoomOut, RotateCcw, MapPin } from 'lucide-react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Platform, Dimensions, Animated, PanResponder, Alert as RNAlert } from 'react-native';
+import { Users, RotateCcw } from 'lucide-react-native';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 interface Alert {
   id: string;
-  type: string;
+  alert_type: string;
   location: {
     latitude: number;
     longitude: number;
   };
   reportType: 'vibe' | 'event' | 'sos';
   description?: string;
+  timestamp?: string;
 }
 
 interface NearbyUser {
@@ -29,179 +30,250 @@ interface MapViewProps {
   location: {
     latitude: number;
     longitude: number;
+    accuracy?: number;
   };
   alerts: Alert[];
   nearbyUsers: NearbyUser[];
   onMapPress: (coordinate: { lat: number; lng: number }) => void;
+  onAlertPress?: (alert: Alert) => void;
+  focusLocation?: {
+    latitude: number;
+    longitude: number;
+  };
+  followUserLocation?: boolean;
+  onFollowUserChange?: (follow: boolean) => void;
 }
 
-// Web Map Component using OpenStreetMap tiles
-function WebMapView({ location, alerts, nearbyUsers, onMapPress }: MapViewProps) {
-  const zoom = 13;
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const mapRef = useRef<HTMLDivElement>(null);
-  const leafletMapRef = useRef<any>(null);
+// Simplified Web Map Component
+function WebMapView({ location, alerts, nearbyUsers, onMapPress, onAlertPress, focusLocation, followUserLocation, onFollowUserChange }: MapViewProps) {
+  // Use the fallback map view for web
+  return <FallbackMobileMapView 
+    location={location} 
+    alerts={alerts} 
+    nearbyUsers={nearbyUsers} 
+    onMapPress={onMapPress} 
+    onAlertPress={onAlertPress} 
+    focusLocation={focusLocation} 
+    followUserLocation={followUserLocation} 
+    onFollowUserChange={onFollowUserChange} 
+  />;
+}
+
+
+
+// Native Map Component using react-native-maps
+function NativeMapComponent({ location, alerts, nearbyUsers, onMapPress, onAlertPress, focusLocation, followUserLocation, onFollowUserChange }: MapViewProps) {
+  const [MapComponents, setMapComponents] = useState<any>(null);
+  const [isMapLoading, setIsMapLoading] = useState(true);
+  const mapRef = useRef<any>(null);
+  const [region, setRegion] = useState({
+    latitude: location.latitude,
+    longitude: location.longitude,
+    latitudeDelta: 0.01,
+    longitudeDelta: 0.01,
+  });
 
   useEffect(() => {
-    if (Platform.OS === 'web') {
-      // Load Leaflet dynamically for web
-      const loadLeaflet = async () => {
-        try {
-          const L = await import('leaflet');
-          
-          // Add CSS
-          if (typeof document !== 'undefined' && !document.querySelector('link[href*="leaflet.css"]')) {
-            const link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-            document.head.appendChild(link);
-          }
-
-          // Initialize map only once
-          if (mapRef.current && !leafletMapRef.current) {
-            const map = L.map(mapRef.current, {
-              center: [location.latitude, location.longitude],
-              zoom: zoom,
-              zoomControl: true,
-              scrollWheelZoom: true,
-              doubleClickZoom: true,
-              dragging: true,
-              touchZoom: true,
-              boxZoom: true,
-              keyboard: true
-            });
-            
-            leafletMapRef.current = map;
-            
-            // Add OpenStreetMap tiles with better mobile support
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-              attribution: '© OpenStreetMap contributors',
-              maxZoom: 19,
-              tileSize: 256,
-              zoomOffset: 0
-            }).addTo(map);
-
-            // Add user location marker
-            const userIcon = L.divIcon({
-              className: 'user-location-marker',
-              html: '<div style="width: 20px; height: 20px; background: #2196F3; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(33, 150, 243, 0.5); z-index: 1000;"></div>',
-              iconSize: [20, 20],
-              iconAnchor: [10, 10]
-            });
-            L.marker([location.latitude, location.longitude], { icon: userIcon }).addTo(map);
-
-            // Add 10km radius circle
-            L.circle([location.latitude, location.longitude], {
-              color: '#ff4757',
-              fillColor: '#ff4757',
-              fillOpacity: 0.1,
-              radius: 10000,
-              weight: 2
-            }).addTo(map);
-
-            // Handle map clicks
-            map.on('click', (e: any) => {
-              onMapPress({ lat: e.latlng.lat, lng: e.latlng.lng });
-            });
-
-            // Force map to resize after initialization
-            setTimeout(() => {
-              map.invalidateSize();
-              setMapLoaded(true);
-            }, 100);
-          }
-        } catch (error) {
-          console.error('Failed to load Leaflet:', error);
-          setMapLoaded(true); // Show fallback
-        }
-      };
-
-      loadLeaflet();
+    // Only load react-native-maps on native platforms
+    if (Platform.OS !== 'web') {
+      import('react-native-maps')
+        .then((RNMaps) => {
+          setMapComponents({
+            MapView: RNMaps.default,
+            Marker: RNMaps.Marker,
+            Circle: RNMaps.Circle,
+            PROVIDER_DEFAULT: RNMaps.PROVIDER_DEFAULT,
+            PROVIDER_GOOGLE: RNMaps.PROVIDER_GOOGLE,
+          });
+          setIsMapLoading(false);
+        })
+        .catch((error) => {
+          console.log('Failed to load react-native-maps:', error);
+          setIsMapLoading(false);
+        });
+    } else {
+      setIsMapLoading(false);
     }
-  }, [location.latitude, location.longitude, zoom, onMapPress]);
+  }, []);
 
-  // Update markers when data changes
   useEffect(() => {
-    if (Platform.OS === 'web' && leafletMapRef.current && mapLoaded) {
-      const updateMarkers = async () => {
-        try {
-          const L = await import('leaflet');
-          const map = leafletMapRef.current;
-          
-          // Clear existing markers (except user location and radius)
-          map.eachLayer((layer: any) => {
-            if (layer.options && (layer.options.className === 'alert-marker' || layer.options.className === 'user-marker')) {
-              map.removeLayer(layer);
-            }
-          });
-
-          // Add alert markers
-          alerts.forEach((alert) => {
-            const color = alert.reportType === 'sos' ? '#ff4757' : 
-                        alert.reportType === 'event' ? '#FF9800' : '#4CAF50';
-            const emoji = alert.reportType === 'sos' ? '🆘' : 
-                         alert.reportType === 'event' ? '⚠️' : '💚';
-            
-            const alertIcon = L.divIcon({
-              className: 'alert-marker',
-              html: `<div style="width: 24px; height: 24px; background: ${color}; border: 2px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${emoji}</div>`,
-              iconSize: [24, 24],
-              iconAnchor: [12, 12]
-            });
-            
-            L.marker([alert.location.latitude, alert.location.longitude], { icon: alertIcon })
-              .addTo(map)
-              .bindPopup(`<b>${alert.reportType.toUpperCase()}</b><br/>${alert.description || alert.type}`);
-          });
-
-          // Add nearby user markers
-          nearbyUsers.forEach((user) => {
-            const userColor = user.isResponder ? '#ff4757' : '#2196F3';
-            const userIcon = L.divIcon({
-              className: 'user-marker',
-              html: `<div style="width: 16px; height: 16px; background: ${userColor}; border: 1px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px;">👤</div>`,
-              iconSize: [16, 16],
-              iconAnchor: [8, 8]
-            });
-            
-            L.marker([user.location.latitude, user.location.longitude], { icon: userIcon })
-              .addTo(map)
-              .bindPopup(`<b>${user.role}</b>${user.isResponder ? '<br/>(Responder)' : ''}`);
-          });
-        } catch (error) {
-          console.error('Error updating markers:', error);
-        }
-      };
-
-      updateMarkers();
+    if (followUserLocation && mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      }, 1000);
     }
-  }, [alerts, nearbyUsers, mapLoaded]);
+  }, [location, followUserLocation]);
+
+  useEffect(() => {
+    if (focusLocation && mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: focusLocation.latitude,
+        longitude: focusLocation.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      }, 1000);
+    }
+  }, [focusLocation]);
+
+  const getMarkerColor = (alert: Alert) => {
+    if (alert.reportType === 'vibe') {
+      const vibeColors: Record<string, string> = {
+        dangerous: '#F44336',
+        suspicious: '#FFD700',
+        crowded: '#FFC107',
+        calm: '#2196F3',
+        safe: '#9C27B0',
+        lgbtqia: '#FF69B4',
+      };
+      return vibeColors[alert.alert_type] || '#4CAF50';
+    }
+    return alert.reportType === 'sos' ? '#ff4757' : '#FF9800';
+  };
+
+  const getVibeEmoji = (alertType: string) => {
+    const vibeEmojis: Record<string, string> = {
+      dangerous: '⚠️',
+      suspicious: '👁️',
+      crowded: '👥',
+      calm: '😌',
+      safe: '✅',
+      lgbtqia: '🏳️‍🌈',
+    };
+    return vibeEmojis[alertType] || '📍';
+  };
+
+  if (isMapLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading map...</Text>
+      </View>
+    );
+  }
+
+  if (!MapComponents || !MapComponents.MapView) {
+    return <FallbackMobileMapView 
+      location={location} 
+      alerts={alerts} 
+      nearbyUsers={nearbyUsers} 
+      onMapPress={onMapPress} 
+      onAlertPress={onAlertPress} 
+      focusLocation={focusLocation} 
+      followUserLocation={followUserLocation} 
+      onFollowUserChange={onFollowUserChange} 
+    />;
+  }
+
+  const { MapView, Marker, Circle, PROVIDER_DEFAULT, PROVIDER_GOOGLE } = MapComponents;
 
   return (
     <View style={styles.container}>
-      <div 
+      <MapView
         ref={mapRef}
-        style={{ 
-          width: '100%', 
-          height: '100%', 
-          backgroundColor: '#0d1421',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          zIndex: 1
+        style={styles.map}
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+        initialRegion={region}
+        showsUserLocation={true}
+        showsMyLocationButton={false}
+        showsCompass={false}
+        followsUserLocation={followUserLocation}
+        onRegionChangeComplete={(newRegion: any) => {
+          setRegion(newRegion);
+          if (onFollowUserChange) {
+            onFollowUserChange(false);
+          }
         }}
-      />
-      {!mapLoaded && (
-        <View style={styles.loadingContainer}>
-          <MapPin size={48} color="#ff4757" />
-          <Text style={styles.loadingText}>Loading interactive map...</Text>
-        </View>
-      )}
+        onPress={(e: any) => {
+          const coordinate = e.nativeEvent.coordinate;
+          onMapPress({ lat: coordinate.latitude, lng: coordinate.longitude });
+        }}
+      >
+        {/* User location marker with accuracy circle */}
+        <Marker
+          coordinate={{
+            latitude: location.latitude,
+            longitude: location.longitude,
+          }}
+          title="Your Location"
+          pinColor="#2196F3"
+        />
+        {location.accuracy && (
+          <Circle
+            center={{
+              latitude: location.latitude,
+              longitude: location.longitude,
+            }}
+            radius={location.accuracy}
+            fillColor="rgba(33, 150, 243, 0.1)"
+            strokeColor="rgba(33, 150, 243, 0.3)"
+            strokeWidth={1}
+          />
+        )}
+
+        {/* Alert markers */}
+        {alerts.map((alert) => (
+          <React.Fragment key={alert.id}>
+            {alert.reportType === 'vibe' && (
+              <Circle
+                center={{
+                  latitude: alert.location.latitude,
+                  longitude: alert.location.longitude,
+                }}
+                radius={100}
+                fillColor={`${getMarkerColor(alert)}30`}
+                strokeColor={`${getMarkerColor(alert)}60`}
+                strokeWidth={2}
+              />
+            )}
+            <Marker
+              coordinate={{
+                latitude: alert.location.latitude,
+                longitude: alert.location.longitude,
+              }}
+              onPress={() => onAlertPress && onAlertPress(alert)}
+            >
+              <View style={[
+                alert.reportType === 'vibe' ? styles.vibeMarker : styles.alertMarker,
+                { backgroundColor: getMarkerColor(alert) }
+              ]}>
+                <Text style={styles.markerEmoji}>
+                  {alert.reportType === 'sos' ? '🆘' :
+                   alert.reportType === 'event' ? '⚠️' :
+                   getVibeEmoji(alert.alert_type)}
+                </Text>
+              </View>
+            </Marker>
+          </React.Fragment>
+        ))}
+
+        {/* Nearby user markers */}
+        {nearbyUsers.map((user) => (
+          <Marker
+            key={user.id}
+            coordinate={{
+              latitude: user.location.latitude,
+              longitude: user.location.longitude,
+            }}
+            title={user.role}
+            description={user.isResponder ? 'Responder' : 'User'}
+          >
+            <View style={[
+              styles.userMarker,
+              { backgroundColor: user.isResponder ? '#ff4757' : '#2196F3' }
+            ]}>
+              <Users size={10} color="#ffffff" />
+            </View>
+          </Marker>
+        ))}
+      </MapView>
     </View>
   );
 }
 
-// Mobile Map Component (fallback for native)
-function MobileMapView({ location, alerts, nearbyUsers, onMapPress }: MapViewProps) {
+// Fallback for when react-native-maps is not available
+function FallbackMobileMapView({ location, alerts, nearbyUsers, onMapPress, onAlertPress, focusLocation }: MapViewProps) {
   const [, setSelectedMarker] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const panValue = useRef(new Animated.ValueXY()).current;
@@ -243,25 +315,31 @@ function MobileMapView({ location, alerts, nearbyUsers, onMapPress }: MapViewPro
   ).current;
 
   const getMarkerColor = (alert: Alert) => {
-    switch (alert.reportType) {
-      case 'sos':
-        return '#ff4757';
-      case 'event':
-        return '#FF9800';
-      case 'vibe':
-        return '#4CAF50';
-      default:
-        return '#8e8e93';
+    if (alert.reportType === 'vibe') {
+      const vibeColors: Record<string, string> = {
+        dangerous: '#F44336',
+        suspicious: '#FFD700',
+        crowded: '#FFC107',
+        calm: '#2196F3',
+        safe: '#9C27B0',
+        lgbtqia: '#FF69B4',
+      };
+      return vibeColors[alert.alert_type] || '#4CAF50';
     }
+    return alert.reportType === 'sos' ? '#ff4757' : '#FF9800';
   };
 
   const handleMarkerPress = (alert: Alert) => {
     setSelectedMarker(alert.id);
-    RNAlert.alert(
-      `${alert.reportType.toUpperCase()} Alert`,
-      alert.description || `${alert.type} reported at this location`,
-      [{ text: 'OK', onPress: () => setSelectedMarker(null) }]
-    );
+    if (onAlertPress) {
+      onAlertPress(alert);
+    } else {
+      RNAlert.alert(
+        `${alert.reportType.toUpperCase()} Alert`,
+        alert.description || `${alert.alert_type} reported at this location`,
+        [{ text: 'OK', onPress: () => setSelectedMarker(null) }]
+      );
+    }
   };
 
   const handleUserMarkerPress = (user: NearbyUser) => {
@@ -270,24 +348,6 @@ function MobileMapView({ location, alerts, nearbyUsers, onMapPress }: MapViewPro
       `${user.role}${user.isResponder ? ' (Responder)' : ''}`,
       [{ text: 'OK' }]
     );
-  };
-
-  const handleZoomIn = () => {
-    const newZoom = Math.min(zoom * 1.5, 5);
-    setZoom(newZoom);
-    Animated.spring(scaleValue, {
-      toValue: newZoom,
-      useNativeDriver: false,
-    }).start();
-  };
-
-  const handleZoomOut = () => {
-    const newZoom = Math.max(zoom / 1.5, 0.5);
-    setZoom(newZoom);
-    Animated.spring(scaleValue, {
-      toValue: newZoom,
-      useNativeDriver: false,
-    }).start();
   };
 
   const handleReset = () => {
@@ -343,42 +403,84 @@ function MobileMapView({ location, alerts, nearbyUsers, onMapPress }: MapViewPro
           }]} />
         </View>
 
-        {/* 10km radius circle */}
-        <View style={[styles.radiusCircle, {
-          left: '50%',
-          top: '50%',
-          marginLeft: -100,
-          marginTop: -100,
-        }]} />
-
-        {/* Alert markers */}
+        {/* Alert markers and vibes */}
         {alerts.slice(0, 8).map((alert, index) => {
           const angle = (index * 45) * (Math.PI / 180);
           const radius = 80 + (index % 3) * 30;
           const x = Math.cos(angle) * radius;
           const y = Math.sin(angle) * radius;
           
-          return (
-            <TouchableOpacity
-              key={alert.id}
-              style={[
-                styles.alertMarkerWeb,
-                {
-                  left: `50%`,
-                  top: `50%`,
-                  marginLeft: x - 12,
-                  marginTop: y - 12,
-                  backgroundColor: getMarkerColor(alert),
-                },
-              ]}
-              onPress={() => handleMarkerPress(alert)}
-            >
-              <Text style={styles.markerText}>
-                {alert.reportType === 'sos' ? '🆘' : 
-                 alert.reportType === 'event' ? '⚠️' : '💚'}
-              </Text>
-            </TouchableOpacity>
-          );
+          const vibeEmojis: Record<string, string> = {
+            dangerous: '⚠️',
+            suspicious: '👁️',
+            crowded: '👥',
+            calm: '😌',
+            safe: '✅',
+            lgbtqia: '🏳️‍🌈',
+          };
+          
+          if (alert.reportType === 'vibe') {
+            // Render vibe as both heat circle and icon
+            return (
+              <View key={alert.id}>
+                <Animated.View
+                  style={[
+                    styles.vibeHeatCircle,
+                    {
+                      left: `50%`,
+                      top: `50%`,
+                      marginLeft: x - 60,
+                      marginTop: y - 60,
+                      backgroundColor: getMarkerColor(alert),
+                      opacity: 0.3,
+                    },
+                  ]}
+                >
+                  <Animated.View style={[styles.vibeHeatInner, { backgroundColor: getMarkerColor(alert) }]} />
+                  <Animated.View style={[styles.vibeHeatCore, { backgroundColor: getMarkerColor(alert) }]} />
+                </Animated.View>
+                <TouchableOpacity
+                  style={[
+                    styles.vibeMarkerWeb,
+                    {
+                      left: `50%`,
+                      top: `50%`,
+                      marginLeft: x - 14,
+                      marginTop: y - 14,
+                      backgroundColor: getMarkerColor(alert),
+                    },
+                  ]}
+                  onPress={() => handleMarkerPress(alert)}
+                >
+                  <Text style={styles.markerText}>
+                    {vibeEmojis[alert.alert_type] || '📍'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            );
+          } else {
+            // Render event/SOS as icon
+            return (
+              <TouchableOpacity
+                key={alert.id}
+                style={[
+                  styles.alertMarkerWeb,
+                  {
+                    left: `50%`,
+                    top: `50%`,
+                    marginLeft: x - 16,
+                    marginTop: y - 16,
+                    backgroundColor: getMarkerColor(alert),
+                  },
+                ]}
+                onPress={() => handleMarkerPress(alert)}
+              >
+                <Text style={styles.markerText}>
+                  {alert.reportType === 'sos' ? '🆘' : '⚠️'}
+                </Text>
+              </TouchableOpacity>
+            );
+          }
         })}
 
         {/* Nearby user markers */}
@@ -409,14 +511,8 @@ function MobileMapView({ location, alerts, nearbyUsers, onMapPress }: MapViewPro
         })}
       </Animated.View>
 
-      {/* Map controls */}
+      {/* Map controls - Reset only */}
       <View style={styles.mapControls}>
-        <TouchableOpacity style={styles.controlButton} onPress={handleZoomIn}>
-          <ZoomIn size={20} color="#ffffff" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.controlButton} onPress={handleZoomOut}>
-          <ZoomOut size={20} color="#ffffff" />
-        </TouchableOpacity>
         <TouchableOpacity style={styles.controlButton} onPress={handleReset}>
           <RotateCcw size={20} color="#ffffff" />
         </TouchableOpacity>
@@ -425,7 +521,7 @@ function MobileMapView({ location, alerts, nearbyUsers, onMapPress }: MapViewPro
       {/* Map info */}
       <View style={styles.mapInfo}>
         <Text style={styles.mapInfoText}>Interactive Map</Text>
-        <Text style={styles.mapInfoSubtext}>Drag to pan • Tap controls to zoom • Tap markers for details</Text>
+        <Text style={styles.mapInfoSubtext}>Drag to pan • Tap markers for details</Text>
       </View>
       
       {/* Map legend */}
@@ -452,17 +548,81 @@ function MobileMapView({ location, alerts, nearbyUsers, onMapPress }: MapViewPro
   );
 }
 
-export function HyperMapView({ location, alerts, nearbyUsers, onMapPress }: MapViewProps) {
+export function HyperMapView({ location, alerts, nearbyUsers, onMapPress, onAlertPress, focusLocation, followUserLocation, onFollowUserChange }: MapViewProps) {
+  // Always use fallback on web or when react-native-maps is not available
   if (Platform.OS === 'web') {
-    return <WebMapView location={location} alerts={alerts} nearbyUsers={nearbyUsers} onMapPress={onMapPress} />;
+    return <FallbackMobileMapView 
+      location={location} 
+      alerts={alerts} 
+      nearbyUsers={nearbyUsers} 
+      onMapPress={onMapPress} 
+      onAlertPress={onAlertPress} 
+      focusLocation={focusLocation} 
+      followUserLocation={followUserLocation} 
+      onFollowUserChange={onFollowUserChange} 
+    />;
   }
-  return <MobileMapView location={location} alerts={alerts} nearbyUsers={nearbyUsers} onMapPress={onMapPress} />;
+  
+  // On mobile, try to use native map component which will handle its own fallback
+  return <NativeMapComponent 
+    location={location} 
+    alerts={alerts} 
+    nearbyUsers={nearbyUsers} 
+    onMapPress={onMapPress} 
+    onAlertPress={onAlertPress} 
+    focusLocation={focusLocation} 
+    followUserLocation={followUserLocation} 
+    onFollowUserChange={onFollowUserChange} 
+  />;
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0d1421',
+  },
+  map: {
+    flex: 1,
+  },
+  alertMarker: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#ffffff',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  vibeMarker: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  userMarker: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ffffff',
+  },
+  markerEmoji: {
+    fontSize: 14,
   },
   mapContainer: {
     flex: 1,
@@ -490,7 +650,7 @@ const styles = StyleSheet.create({
   },
   mapControls: {
     position: 'absolute',
-    top: 60,
+    bottom: 200,
     right: 16,
     gap: 8,
   },
@@ -567,9 +727,48 @@ const styles = StyleSheet.create({
   },
   alertMarkerWeb: {
     position: 'absolute',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#ffffff',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 5,
+  },
+  vibeHeatCircle: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  vibeHeatInner: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    opacity: 0.4,
+  },
+  vibeHeatCore: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    opacity: 0.6,
+  },
+  vibeMarkerWeb: {
+    position: 'absolute',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -579,7 +778,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
-    zIndex: 5,
+    zIndex: 10,
   },
   userMarkerWeb: {
     position: 'absolute',
@@ -645,4 +844,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+
 });
