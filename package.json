@@ -6,7 +6,14 @@
     "start": "bunx expo start --web --port 5000",
     "start-web": "bunx expo start --web --port 5000",
     "start-web-dev": "DEBUG=expo* bunx expo start --web --port 5000",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "build:ios": "bunx eas build --platform ios --profile production",
+    "build:android": "bunx eas build --platform android --profile production",
+    "build:all": "bunx eas build --platform all --profile production",
+    "submit:ios": "bunx eas submit --platform ios",
+    "submit:android": "bunx eas submit --platform android",
+    "preview:ios": "bunx eas build --platform ios --profile preview",
+    "preview:android": "bunx eas build --platform android --profile preview"
   },
   "dependencies": {
     "@expo/cli": "^54.0.2",
