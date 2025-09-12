@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "start": "bunx expo start --web --port 5000",
-    "start-web": "bunx expo start --web --port 5000",
+    "start-web": "bunx expo start --web --port 5000 --no-dev",
     "start-web-dev": "DEBUG=expo* bunx expo start --web --port 5000",
     "lint": "expo lint",
     "build:ios": "bunx eas build --platform ios --profile production",
