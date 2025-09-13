@@ -3,29 +3,22 @@ android-workflow:
   name: Android Build
   max_build_duration: 60
   environment:
-    android_signing:
-      - keystore_reference
-    groups:
-      - google_play
+    node: 18.19.0
     vars:
-      PACKAGE_NAME: "com.hypper.app"
-    node: 18.20.3
-    npm: 10.2.3
-    xcode: latest
-    cocoapods: default
+      EXPO_PUBLIC_SUPABASE_URL: ${https://irbjqbmzohavhhdflsip.supabase.co}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlyYmpxYm16b2hhdmhoZGZsc2lwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyMzE1NDMsImV4cCI6MjA2NzgwNzU0M30.XS1bZySIL4MF9GI0oak_zYHKLE-1kmTEKmW7tJH0flw}
   scripts:
     - name: Install npm dependencies
       script: |
-        npm ci --legacy-peer-deps
+        npm install --legacy-peer-deps
     
     - name: Install Expo CLI
       script: |
         npm install -g expo-cli@latest
-        npm install -g eas-cli@latest
     
-    - name: Setup Android SDK
+    - name: Setup Expo
       script: |
-        echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+        npx expo-doctor
     
     - name: Prebuild Android
       script: |
@@ -35,15 +28,8 @@ android-workflow:
       script: |
         cd android
         ./gradlew assembleRelease
-    
-    - name: Build Android AAB
-      script: |
-        cd android
-        ./gradlew bundleRelease
   artifacts:
-    - android/app/build/outputs/**/*.apk
-    - android/app/build/outputs/**/*.aab
-    - android/app/build/outputs/**/mapping.txt
+    - android/app/build/outputs/apk/release/*.apk
   publishing:
     email:
       recipients:
@@ -51,7 +37,3 @@ android-workflow:
       notify:
         success: true
         failure: true
-    google_play:
-      credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-      track: internal
-      submit_as_draft: true
