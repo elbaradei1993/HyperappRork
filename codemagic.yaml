@@ -1,31 +1,31 @@
 workflows:
-react-native-android:
-  name: React Native Android
+android-workflow:
+  name: Android Build
   max_build_duration: 60
-  instance_type: mac_mini_m1
   environment:
     android_signing:
-      - pulse_keystore
+      - keystore_reference
     groups:
       - google_play
     vars:
       PACKAGE_NAME: "com.pulse.app"
-    node: 18.19.0
+    node: 18.20.3
     npm: 10.2.3
-    ndk: r25b
-    java: 17
+    xcode: latest
+    cocoapods: default
   scripts:
     - name: Install npm dependencies
       script: |
         npm ci --legacy-peer-deps
     
-    - name: Set Android SDK location
-      script: |
-        echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
-    
     - name: Install Expo CLI
       script: |
-        npm install -g expo-cli
+        npm install -g expo-cli@latest
+        npm install -g eas-cli@latest
+    
+    - name: Setup Android SDK
+      script: |
+        echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
     
     - name: Prebuild Android
       script: |
@@ -40,16 +40,14 @@ react-native-android:
       script: |
         cd android
         ./gradlew bundleRelease
-  
   artifacts:
     - android/app/build/outputs/**/*.apk
     - android/app/build/outputs/**/*.aab
     - android/app/build/outputs/**/mapping.txt
-  
   publishing:
     email:
       recipients:
-        - your-email@example.com
+        - user@example.com
       notify:
         success: true
         failure: true
@@ -57,113 +55,3 @@ react-native-android:
       credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
       track: internal
       submit_as_draft: true
-
-react-native-ios:
-  name: React Native iOS
-  max_build_duration: 60
-  instance_type: mac_mini_m1
-  integrations:
-    app_store_connect: codemagic
-  environment:
-    ios_signing:
-      distribution_type: app_store
-      bundle_identifier: com.pulse.app
-    vars:
-      BUNDLE_ID: "com.pulse.app"
-      XCODE_WORKSPACE: "ios/Pulse.xcworkspace"
-      XCODE_SCHEME: "Pulse"
-    node: 18.19.0
-    xcode: 15.0
-    cocoapods: default
-  scripts:
-    - name: Install npm dependencies
-      script: |
-        npm ci --legacy-peer-deps
-    
-    - name: Install Expo CLI
-      script: |
-        npm install -g expo-cli
-    
-    - name: Prebuild iOS
-      script: |
-        npx expo prebuild --platform ios --clear
-    
-    - name: Install CocoaPods dependencies
-      script: |
-        cd ios && pod install
-    
-    - name: Set up code signing settings on Xcode project
-      script: |
-        xcode-project use-profiles
-    
-    - name: Increment build number
-      script: |
-        cd $CM_BUILD_DIR/ios
-        LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_ID")
-        agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
-    
-    - name: Build ipa for distribution
-      script: |
-        xcode-project build-ipa \
-          --workspace "$CM_BUILD_DIR/ios/$XCODE_WORKSPACE" \
-          --scheme "$XCODE_SCHEME" \
-          --archive-flags="-destination 'generic/platform=iOS'"
-  
-  artifacts:
-    - build/ios/ipa/*.ipa
-    - /tmp/xcodebuild_logs/*.log
-    - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
-    - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
-  
-  publishing:
-    email:
-      recipients:
-        - your-email@example.com
-      notify:
-        success: true
-        failure: true
-    app_store_connect:
-      auth: integration
-      submit_to_testflight: true
-      beta_groups:
-        - group_name
-      submit_to_app_store: false
-
-development-build:
-  name: Development Build
-  max_build_duration: 60
-  instance_type: mac_mini_m1
-  environment:
-    node: 18.19.0
-    npm: 10.2.3
-  scripts:
-    - name: Install dependencies
-      script: |
-        npm ci --legacy-peer-deps
-    
-    - name: Run tests
-      script: |
-        npm test -- --passWithNoTests
-    
-    - name: Lint code
-      script: |
-        npm run lint || true
-    
-    - name: Type check
-      script: |
-        npx tsc --noEmit
-    
-    - name: Build for web
-      script: |
-        npx expo export --platform web
-  
-  artifacts:
-    - dist/**
-  
-  publishing:
-    email:
-      recipients:
-        - your-email@example.com
-      notify:
-        success: false
-        failure: true
