@@ -17,9 +17,9 @@ workflows:
       - name: Install EAS CLI
         script: |
           npm install -g eas-cli
-      - name: Build Android APK
+      - name: Build Android APK (remote)
         script: |
-          npx eas-cli build -p android --profile preview --output ./app-release.apk
+          npx eas-cli build -p android --profile preview --non-interactive
 
     artifacts:
-      - ./app-release.apk
+      - build/**/android/**/*.apk
