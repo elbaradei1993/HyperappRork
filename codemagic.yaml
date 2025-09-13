@@ -8,7 +8,7 @@ android-workflow:
     groups:
       - google_play
     vars:
-      PACKAGE_NAME: "com.yourcompany.hyperapp"
+      PACKAGE_NAME: "com.hyperapp"
     node: 18.17.0
     npm: 9.6.7
     ndk: r23b
