@@ -1,29 +1,31 @@
 workflows:
   android-workflow:
-    name: Android Build
-    max_build_duration: 120
+    name: Android Build via EAS
+    max_build_duration: 60
     environment:
       node: 18.17.0
       npm: 9.6.7
       java: 17
-      ndk: r23b
       vars:
         EXPO_TOKEN: "VkNJEL0mNvRoV36R5vDeYPT4eSLJETE16DWZ0zbb"
         PACKAGE_NAME: "com.hyperapp"
     scripts:
-      - name: Clean node modules & install
+      - name: Install dependencies
         script: |
-          rm -rf node_modules package-lock.json
-          npm install --legacy-peer-deps
-
-      - name: Build Expo app via EAS
+          npm ci
+      - name: Install EAS CLI
         script: |
-          npx eas-cli build --platform android --profile production --non-interactive
-
+          npm install -g eas-cli@16.19.1
+      - name: Configure EAS project
+        script: |
+          eas login --token $EXPO_TOKEN
+          eas build:configure
+      - name: Build Android APK
+        script: |
+          eas build -p android --profile production --non-interactive
     artifacts:
-      - android/app/build/outputs/**/*.apk
-      - android/app/build/outputs/**/*.aab
-
+      - build/**/*.apk
+      - build/**/*.aab
     publishing:
       email:
         recipients:
