@@ -9,6 +9,6 @@ workflows:
       - name: Install dependencies
         script: npm install --legacy-peer-deps
       - name: Build Android APK
-        script: npx expo build:android -t apk
+        script: npx eas build -p android --profile preview --local --output ./app-release.apk
     artifacts:
-      - dist/**/*.apk
+      - ./app-release.apk
