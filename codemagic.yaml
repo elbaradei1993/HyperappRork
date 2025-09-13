@@ -1,43 +1,10 @@
-workflows:
-  android-apk-build:
-    name: Android APK Build
-    max_build_duration: 120
-    instance_type: mac_mini_m2
-
-    environment:
-      node: 20
-      npm: 9
-      vars:
-        EXPO_TOKEN: VkNJEL0mNvRoV36R5vDeYPT4eSLJETE16DWZ0zbb
-      cocoapods: default
-      flutter: default
-
-    scripts:
-      - name: Clean environment
-        script: |
-          echo "Cleaning npm cache and removing old node_modules"
-          npm cache clean --force
-          rm -rf node_modules package-lock.json
-
-      - name: Fix ajv dependency
-        script: |
-          echo "Installing compatible ajv and ajv-keywords versions"
-          npm install ajv@^8.12.0 ajv-keywords@^5.0.0 --legacy-peer-deps
-
-      - name: Install dependencies
-        script: |
-          echo "Installing dependencies with legacy peer deps"
-          npm install --legacy-peer-deps
-
-      - name: Install EAS CLI
-        script: |
-          echo "Installing latest EAS CLI globally"
-          npm install -g eas-cli --legacy-peer-deps
-
-      - name: Build Android APK
-        script: |
-          echo "Starting EAS build for Android APK"
-          eas build --platform android --profile production --non-interactive
-
-    artifacts:
-      - build/**/app-*.apk
+scripts:
+- name: Configure EAS
+  script: |
+    # Set EAS project ID (you'll need to get this from your Expo account)
+    export EXPO_TOKEN=VkNJEL0mNvRoV36R5vDeYPT4eSLJETE16DWZ0zbb
+    npx eas-cli@latest whoami || npx eas-cli@latest login --non-interactive
+    
+- name: Build Android APK
+  script: |
+    npx eas-cli@latest build --platform android --profile production --local --output ./app-release.apk --non-interactive
