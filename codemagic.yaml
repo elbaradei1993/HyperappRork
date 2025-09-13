@@ -34,11 +34,6 @@ workflows:
           echo "Installing latest EAS CLI globally"
           npm install -g eas-cli --legacy-peer-deps
 
-      - name: Initialize EAS project
-        script: |
-          echo "Initializing EAS project"
-          eas init --non-interactive --yes
-
       - name: Build Android APK
         script: |
           echo "Starting EAS build for Android APK"
