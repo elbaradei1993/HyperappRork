@@ -8,7 +8,7 @@ android-workflow:
     groups:
       - google_play
     vars:
-      PACKAGE_NAME: "com.pulse.app"
+      PACKAGE_NAME: "com.hypper.app"
     node: 18.20.3
     npm: 10.2.3
     xcode: latest
@@ -47,7 +47,7 @@ android-workflow:
   publishing:
     email:
       recipients:
-        - user@example.com
+        - fatehielbaradei2030@gmail.com
       notify:
         success: true
         failure: true
