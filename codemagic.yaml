@@ -1,25 +1,27 @@
 workflows:
-  build-android-apk:
-    name: HyperappRork Android APK Build
+  android-apk-build:
+    name: Android APK Build
     max_build_duration: 120
     instance_type: mac_mini_m2
-
     environment:
       node: 20
       npm: 9
       vars:
-        EXPO_TOKEN: VkNJEL0mNvRoV36R5vDeYPT4eSLJETE16DWZ0zbb
-
+        EXPO_TOKEN: $EXPO_TOKEN  # make sure you have set this in Codemagic
     scripts:
+      - name: Clean environment
+        script: |
+          echo "Cleaning npm cache and removing old node_modules"
+          npm cache clean --force
+          rm -rf node_modules package-lock.json
       - name: Install dependencies
         script: |
           npm install --legacy-peer-deps
-      - name: Install EAS CLI
+      - name: Verify node_modules
         script: |
-          npm install -g eas-cli
-      - name: Build Android APK
+          ls node_modules | head -20
+      - name: Build APK
         script: |
-          npx eas-cli build -p android --profile apk-build --non-interactive
-
+          npx eas build --platform android --profile apk-build --non-interactive
     artifacts:
-      - build/**/android/**/*.apk
+      - build/**/app-*.apk
