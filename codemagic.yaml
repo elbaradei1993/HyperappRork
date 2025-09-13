@@ -6,18 +6,20 @@ workflows:
 
     environment:
       node: 20
-      npm: 9
-      java: 17
-      groups:
-        - default
+      vars:
+        # Add your Expo token in Codemagic dashboard -> Environment variables
+        EXPO_TOKEN: Encrypted(...) 
 
     scripts:
       - name: Install dependencies
         script: |
           npm install --legacy-peer-deps
+      - name: Install EAS CLI
+        script: |
+          npm install -g eas-cli
       - name: Build Android APK
         script: |
-          npx eas-cli build -p android --profile preview --local --output ./app-release.apk
+          npx eas-cli build -p android --profile preview --output ./app-release.apk
 
     artifacts:
       - ./app-release.apk
