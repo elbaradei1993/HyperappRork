@@ -4,14 +4,12 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
+      node: 20
       vars:
-        NODE_VERSION: 20
-      node: $NODE_VERSION
-      npm: true
-      expo: true
+        EXPO_TOKEN: Encrypted(...) # optional if you want to use EAS cloud builds
     scripts:
       - name: Install dependencies
-        script: npm install
+        script: npm install --legacy-peer-deps
       - name: Build Android APK
         script: npx expo build:android -t apk
       - name: Build Android AAB
@@ -19,6 +17,6 @@ workflows:
       - name: Build iOS IPA
         script: npx expo build:ios -t archive
     artifacts:
-      - build/**/*.apk
-      - build/**/*.aab
-      - build/**/*.ipa
+      - dist/**/*.apk
+      - dist/**/*.aab
+      - dist/**/*.ipa
