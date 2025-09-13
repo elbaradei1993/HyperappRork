@@ -3,25 +3,41 @@ workflows:
     name: Android APK Build
     max_build_duration: 120
     instance_type: mac_mini_m2
+
     environment:
       node: 20
       npm: 9
       vars:
-        EXPO_TOKEN: $EXPO_TOKEN  # make sure you have set this in Codemagic
+        EXPO_TOKEN: VkNJEL0mNvRoV36R5vDeYPT4eSLJETE16DWZ0zbb
+      cocoapods: default
+      flutter: default
+
     scripts:
       - name: Clean environment
         script: |
           echo "Cleaning npm cache and removing old node_modules"
           npm cache clean --force
           rm -rf node_modules package-lock.json
+
+      - name: Fix ajv dependency
+        script: |
+          echo "Installing compatible ajv and ajv-keywords versions"
+          npm install ajv@^8.12.0 ajv-keywords@^5.0.0 --legacy-peer-deps
+
       - name: Install dependencies
         script: |
+          echo "Installing dependencies with legacy peer deps"
           npm install --legacy-peer-deps
-      - name: Verify node_modules
+
+      - name: Verify dependencies
         script: |
+          echo "Listing first 20 node_modules to verify install"
           ls node_modules | head -20
-      - name: Build APK
+
+      - name: Build Android APK
         script: |
-          npx eas build --platform android --profile apk-build --non-interactive
+          echo "Starting EAS build for Android APK"
+          npx eas build --platform android --profile production --non-interactive
+
     artifacts:
       - build/**/app-*.apk
