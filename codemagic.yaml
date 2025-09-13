@@ -3,37 +3,33 @@ android-workflow:
   name: Android Build
   max_build_duration: 60
   environment:
-    node: 18.19.0
+    android_signing:
+      - keystore_reference
     groups:
-      - android_credentials
+      - google_play
     vars:
-      EXPO_PUBLIC_SUPABASE_URL: "https://irbjqbmzohavhhdflsip.supabase.co"
-      EXPO_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlyYmpxYm16b2hhdmhoZGZsc2lwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyMzE1NDMsImV4cCI6MjA2NzgwNzU0M30.XS1bZySIL4MF9GI0oak_zYHKLE-1kmTEKmW7tJH0flw"
+      PACKAGE_NAME: "com.yourcompany.hyperapp"
+    node: 18.17.0
+    npm: 9.6.7
+    ndk: r23b
+    java: 17
   scripts:
     - name: Install npm dependencies
       script: |
         npm install
-    
-    - name: Install EAS CLI
+    - name: Install Expo CLI
       script: |
-        npm install -g eas-cli
-    
-    - name: Setup Expo
+        npm install -g expo-cli
+    - name: Set up local properties
       script: |
-        npx expo-doctor
-    
-    - name: Prebuild Android
-      script: |
-        npx expo prebuild --platform android --clean
-    
+        echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
     - name: Build Android APK
       script: |
         cd android
         ./gradlew assembleRelease
-  
   artifacts:
-    - android/app/build/outputs/apk/release/*.apk
-  
+    - android/app/build/outputs/**/*.apk
+    - android/app/build/outputs/**/*.aab
   publishing:
     email:
       recipients:
