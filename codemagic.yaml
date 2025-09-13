@@ -4,17 +4,19 @@ android-workflow:
   max_build_duration: 60
   environment:
     node: 18.19.0
+    groups:
+      - android_credentials
     vars:
-      EXPO_PUBLIC_SUPABASE_URL: ${https://irbjqbmzohavhhdflsip.supabase.co}
-      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlyYmpxYm16b2hhdmhoZGZsc2lwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyMzE1NDMsImV4cCI6MjA2NzgwNzU0M30.XS1bZySIL4MF9GI0oak_zYHKLE-1kmTEKmW7tJH0flw}
+      EXPO_PUBLIC_SUPABASE_URL: "https://irbjqbmzohavhhdflsip.supabase.co"
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlyYmpxYm16b2hhdmhoZGZsc2lwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyMzE1NDMsImV4cCI6MjA2NzgwNzU0M30.XS1bZySIL4MF9GI0oak_zYHKLE-1kmTEKmW7tJH0flw"
   scripts:
     - name: Install npm dependencies
       script: |
-        npm install --legacy-peer-deps
+        npm install
     
-    - name: Install Expo CLI
+    - name: Install EAS CLI
       script: |
-        npm install -g expo-cli@latest
+        npm install -g eas-cli
     
     - name: Setup Expo
       script: |
@@ -22,14 +24,16 @@ android-workflow:
     
     - name: Prebuild Android
       script: |
-        npx expo prebuild --platform android --clear
+        npx expo prebuild --platform android --clean
     
     - name: Build Android APK
       script: |
         cd android
         ./gradlew assembleRelease
+  
   artifacts:
     - android/app/build/outputs/apk/release/*.apk
+  
   publishing:
     email:
       recipients:
