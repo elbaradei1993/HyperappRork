@@ -1,6 +1,6 @@
 workflows:
-  expo-android-apk:
-    name: Expo Android Build
+  build-android-apk:
+    name: HyperappRork Android APK Build
     max_build_duration: 120
     instance_type: mac_mini_m2
 
@@ -17,9 +17,9 @@ workflows:
       - name: Install EAS CLI
         script: |
           npm install -g eas-cli
-      - name: Build Android APK (remote)
+      - name: Build Android APK
         script: |
-          npx eas-cli build -p android --profile preview --non-interactive
+          npx eas-cli build -p android --profile apk-build --non-interactive
 
     artifacts:
       - build/**/android/**/*.apk
