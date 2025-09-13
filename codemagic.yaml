@@ -1,19 +1,24 @@
 workflows:
-  android-workflow:
-    name: Build Android APK
-    max_build_duration: 60
+  expo-workflow:
+    name: Expo App Build
+    max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
-      groups:
-        - default
       vars:
-        ANDROID_HOME: /usr/local/share/android-sdk
+        NODE_VERSION: 20
+      node: $NODE_VERSION
+      npm: true
+      expo: true
     scripts:
       - name: Install dependencies
-        script: |
-          npm install
+        script: npm install
       - name: Build Android APK
-        script: |
-          ./gradlew assembleDebug
+        script: npx expo build:android -t apk
+      - name: Build Android AAB
+        script: npx expo build:android -t app-bundle
+      - name: Build iOS IPA
+        script: npx expo build:ios -t archive
     artifacts:
-      - android/app/build/outputs/**/*.apk
+      - build/**/*.apk
+      - build/**/*.aab
+      - build/**/*.ipa
