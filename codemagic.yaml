@@ -8,6 +8,9 @@ workflows:
       vars:
         EXPO_TOKEN: VkNJEL0mNvRoV36R5vDeYPT4eSLJETE16DWZ0zbb
     scripts:
+      - name: Clean environment
+        script: |
+          rm -rf node_modules package-lock.json
       - name: Install dependencies
         script: |
           npm install --legacy-peer-deps
