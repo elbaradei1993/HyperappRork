@@ -12,7 +12,7 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          npm ci
+          npm install
       - name: Install EAS CLI
         script: |
           npm install -g eas-cli@16.19.1
