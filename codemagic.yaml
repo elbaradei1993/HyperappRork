@@ -6,9 +6,9 @@ workflows:
 
     environment:
       node: 20
+      npm: 9
       vars:
-        # Add your Expo token in Codemagic dashboard -> Environment variables
-        EXPO_TOKEN: Encrypted(...) 
+        EXPO_TOKEN: Encrypted(...)  # <-- Replace with your Codemagic environment variable
 
     scripts:
       - name: Install dependencies
