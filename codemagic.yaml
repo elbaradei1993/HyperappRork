@@ -29,15 +29,15 @@ workflows:
           echo "Installing dependencies with legacy peer deps"
           npm install --legacy-peer-deps
 
-      - name: Verify dependencies
+      - name: Install EAS CLI
         script: |
-          echo "Listing first 20 node_modules to verify install"
-          ls node_modules | head -20
+          echo "Installing latest EAS CLI globally"
+          npm install -g eas-cli --legacy-peer-deps
 
       - name: Build Android APK
         script: |
           echo "Starting EAS build for Android APK"
-          npx eas build --platform android --profile production --non-interactive
+          eas build --platform android --profile production --non-interactive
 
     artifacts:
       - build/**/app-*.apk
