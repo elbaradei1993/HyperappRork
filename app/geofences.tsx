@@ -21,7 +21,6 @@ import { formatDate } from '@/utils/formatDate';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { detectStateFromCoordinates, getStateDisplayText, getStateIcon } from '@/utils/stateDetection';
 
 interface Geofence {
   id: string;
@@ -34,8 +33,6 @@ interface Geofence {
   alert_on_enter: boolean;
   alert_on_exit: boolean;
   is_active: boolean;
-  state?: string;
-  country?: string;
   created_at: string;
 }
 
@@ -171,12 +168,6 @@ export default function GeofencesScreen() {
         accuracy: Location.Accuracy.High
       });
 
-      // Detect state and country from coordinates
-      const stateInfo = detectStateFromCoordinates(
-        currentLocation.coords.latitude,
-        currentLocation.coords.longitude
-      );
-
       const geofenceData = {
         name: formData.name,
         description: formData.description || `${formData.vibe} zone`,
@@ -187,8 +178,6 @@ export default function GeofencesScreen() {
         alert_on_enter: formData.alert_on_enter,
         alert_on_exit: formData.alert_on_exit,
         is_active: formData.is_active,
-        state: stateInfo.state,
-        country: stateInfo.country,
       };
       
       await createGeofence(geofenceData);
@@ -335,7 +324,7 @@ export default function GeofencesScreen() {
 
       const isInside = distance <= geofence.radius_meters;
       const wasInside = geofenceStates[geofence.id] ?? false;
-      const vibe = geofence.vibe || 'safe';
+      const vibe = geofence.vibe || 'monitored';
       const now = Date.now();
       const lastNotification = lastNotificationTime.current[geofence.id] || 0;
 
@@ -356,16 +345,14 @@ export default function GeofencesScreen() {
         saveGeofenceEvents(updatedEvents);
 
         if (isInside && geofence.alert_on_enter) {
-          const stateText = getStateDisplayText(geofence.state ?? null, geofence.country ?? null);
           sendNotification(
             `Entered ${geofence.name}`,
-            `You've entered the ${vibe} zone: ${geofence.name} in ${stateText}`
+            `You've entered the ${vibe} zone: ${geofence.name}`
           );
         } else if (!isInside && geofence.alert_on_exit) {
-          const stateText = getStateDisplayText(geofence.state ?? null, geofence.country ?? null);
           sendNotification(
             `Left ${geofence.name}`,
-            `You've left the ${vibe} zone: ${geofence.name} in ${stateText}`
+            `You've left the ${vibe} zone: ${geofence.name}`
           );
         }
       }
@@ -445,13 +432,6 @@ export default function GeofencesScreen() {
                 {item.center_latitude.toFixed(4)}, {item.center_longitude.toFixed(4)}
               </Text>
               <Text style={styles.detailText}>• {item.radius_meters}m radius</Text>
-              {(item.state || item.country) && (
-                <View style={styles.stateInfo}>
-                  <Text style={styles.stateText}>
-                    {getStateIcon(item.country ?? null)} {getStateDisplayText(item.state ?? null, item.country ?? null)}
-                  </Text>
-                </View>
-              )}
             </View>
           </View>
           <Switch
@@ -919,16 +899,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#666',
-  },
-  stateInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  stateText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
   },
   infoBox: {
     flexDirection: 'row',
