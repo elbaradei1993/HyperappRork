@@ -27,6 +27,10 @@ export default function TabLayout() {
           borderTopWidth: 1,
         },
         headerShown: false,
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600' as const,
+        },
       }}
     >
       <Tabs.Screen
