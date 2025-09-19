@@ -2,9 +2,9 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { authRateLimiter, SessionManager, validatePassword } from '@/utils/security';
-import { offlineManager } from '@/utils/offlineManager';
 import { AppState, AppStateStatus } from 'react-native';
+
+
 
 interface AuthContextType {
   user: User | null;
@@ -13,185 +13,193 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (data: any) => Promise<void>;
+
 }
+
+
 
 export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(() => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const sessionManagerRef = useRef<SessionManager | null>(null);
+
+
   const appStateRef = useRef(AppState.currentState);
 
   useEffect(() => {
-    // Get initial session
-    console.log('Checking for existing session...');
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        console.error('Error getting session:', error);
-      } else {
-        console.log('Session found:', session?.user?.email || 'No session');
-        if (session?.user) {
-          // Initialize session manager for authenticated user
-          sessionManagerRef.current = new SessionManager(15, async () => {
-            console.log('Session timeout - signing out');
-            await signOut();
-          });
-          sessionManagerRef.current.startSession();
+    let mounted = true;
+    
+    const initAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (!error && session?.user && mounted) {
+          setUser(session.user);
+        }
+      } catch (err) {
+        console.error('Auth initialization error:', err);
+      } finally {
+        if (mounted) {
+          setLoading(false);
         }
       }
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    };
+    
+    initAuth();
 
-    // Listen for auth changes
+    // Setup auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        setUser(session?.user ?? null);
-        setLoading(false);
+        if (!mounted) return;
+        
+        if (event === 'INITIAL_SESSION') {
+          return;
+        }
         
         if (event === 'SIGNED_IN' && session?.user) {
-          // Start session manager
-          if (!sessionManagerRef.current) {
-            sessionManagerRef.current = new SessionManager(15, async () => {
-              console.log('Session timeout - signing out');
-              await signOut();
-            });
-          }
-          sessionManagerRef.current.startSession();
+          setUser(session.user);
         } else if (event === 'SIGNED_OUT') {
-          // Stop session manager
-          sessionManagerRef.current?.stopSession();
-          sessionManagerRef.current = null;
+          setUser(null);
+        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+          setUser(session.user);
         }
+        
+        setLoading(false);
       }
     );
 
-    // Handle app state changes for session management
+    // Handle app state changes for session refresh
     const appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
-        // App has come to foreground
-        sessionManagerRef.current?.resetTimer();
+        // Refresh session when app comes to foreground
+        supabase.auth.getSession();
       }
       appStateRef.current = nextAppState;
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
       appStateSubscription.remove();
-      sessionManagerRef.current?.stopSession();
     };
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    // Check rate limiting
-    if (!authRateLimiter.canAttempt(email)) {
-      throw new Error('Too many login attempts. Please try again later.');
+    // Input validation
+    if (!email?.trim() || !password?.trim()) {
+      throw new Error('Email and password are required');
     }
     
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      throw new Error('Please enter a valid email address');
+    }
+    
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+    
     try {
-      console.log('Attempting to sign in with email:', email);
-      
-      // Check if offline
-      if (!offlineManager.getIsOnline()) {
-        throw new Error('No internet connection. Please check your network.');
-      }
+      await supabase.auth.signOut();
       
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: cleanEmail,
+        password: cleanPassword,
       });
       
       if (error) {
-        console.error('Supabase sign in error:', error);
-        throw error;
+        
+        // Provide user-friendly error messages based on error codes and messages
+        if (error.status === 400 || error.message?.includes('Invalid login credentials') || error.message?.includes('invalid_credentials')) {
+          throw new Error('Invalid email or password. Please check your credentials and try again.');
+        } else if (error.status === 422 || error.message?.includes('Email not confirmed') || error.message?.includes('email_not_confirmed')) {
+          throw new Error('Please check your email and confirm your account before signing in.');
+        } else if (error.status === 429 || error.message?.includes('Too many requests') || error.message?.includes('rate_limit')) {
+          throw new Error('Too many login attempts. Please wait a moment and try again.');
+        } else if (error.status === 401) {
+          throw new Error('Authentication failed. Please check your credentials.');
+        } else if (error.message?.includes('network') || error.message?.includes('fetch') || error.message?.includes('timeout')) {
+          throw new Error('Network error. Please check your internet connection and try again.');
+        } else {
+          throw new Error(`Sign in failed: ${error.message || 'Unknown error'}`);
+        }
       }
       
-      // Reset rate limiter on success
-      authRateLimiter.reset(email);
+      if (!data?.user || !data?.session) {
+        throw new Error('Authentication failed. Please try again.');
+      }
       
-      console.log('Sign in successful:', data.user?.email);
+      setUser(data.user);
+      
     } catch (error: any) {
-      console.error('Sign in error details:', {
-        message: error.message,
-        status: error.status,
-        code: error.code,
-      });
-      throw new Error(error.message || 'Failed to sign in');
+      throw error;
     }
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
-    // Validate password strength
-    const passwordValidation = validatePassword(password);
-    if (!passwordValidation.isValid) {
-      throw new Error(passwordValidation.errors.join('\n'));
+    // Input validation
+    if (!email?.trim() || !password?.trim()) {
+      throw new Error('Email and password are required');
     }
     
-    // Check rate limiting
-    if (!authRateLimiter.canAttempt(email)) {
-      throw new Error('Too many signup attempts. Please try again later.');
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      throw new Error('Please enter a valid email address');
+    }
+    
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+    
+    // Password validation
+    if (cleanPassword.length < 6) {
+      throw new Error('Password must be at least 6 characters long');
     }
     
     try {
-      console.log('Attempting to sign up with email:', email);
-      
-      // Check if offline
-      if (!offlineManager.getIsOnline()) {
-        throw new Error('No internet connection. Please check your network.');
-      }
+      await supabase.auth.signOut();
       
       const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
+        email: cleanEmail,
+        password: cleanPassword,
         options: {
-          emailRedirectTo: undefined, // No email confirmation required for testing
+          data: {
+            displayName: cleanEmail.split('@')[0],
+          }
         }
       });
       
       if (error) {
-        console.error('Supabase sign up error:', error);
-        throw error;
+        
+        if (error.status === 422 || error.message?.includes('already registered') || error.message?.includes('already_registered')) {
+          throw new Error('This email is already registered. Please sign in instead.');
+        } else if (error.message?.includes('Password should be') || error.message?.includes('password')) {
+          throw new Error('Password is too weak. Please use a stronger password.');
+        } else if (error.message?.includes('network') || error.message?.includes('fetch') || error.message?.includes('timeout')) {
+          throw new Error('Network error. Please check your internet connection and try again.');
+        } else {
+          throw new Error(`Sign up failed: ${error.message || 'Unknown error'}`);
+        }
       }
       
-      // Reset rate limiter on success
-      authRateLimiter.reset(email);
-      
-      console.log('Sign up successful:', data.user?.email);
-      
-      // Auto sign in after signup if email confirmation is disabled
-      if (data.user && !data.session) {
-        console.log('Email confirmation may be required');
+      if (!data?.user) {
+        throw new Error('Sign up failed. Please try again.');
       }
+      
+      if (!data.session) {
+        throw new Error('Account created successfully! Please check your email to confirm your account, then sign in.');
+      }
+      
+      setUser(data.user);
+      
     } catch (error: any) {
-      console.error('Signup error details:', {
-        message: error.message,
-        status: error.status,
-        code: error.code,
-      });
-      throw new Error(error.message || 'Failed to sign up');
+      throw error;
     }
   }, []);
 
   const signOut = useCallback(async () => {
     try {
-      console.log('Starting sign out process...');
-      
-      // Stop session manager
-      sessionManagerRef.current?.stopSession();
-      sessionManagerRef.current = null;
-      
       const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Supabase sign out error:', error);
-        throw error;
-      }
+      if (error) throw error;
       setUser(null);
-      
-      // Clear offline cache on sign out
-      await offlineManager.clearAllCache();
-      
-      console.log('Sign out successful');
     } catch (error: any) {
-      console.error('Error signing out:', error);
       throw error;
     }
   }, []);
@@ -199,26 +207,6 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(() => 
   const updateProfile = useCallback(async (data: any) => {
     try {
       if (!user) throw new Error('No user logged in');
-      
-      // Reset session timer on activity
-      sessionManagerRef.current?.resetTimer();
-      
-      // Check if offline - queue the update
-      if (!offlineManager.getIsOnline()) {
-        await offlineManager.queueAction('UPDATE_PROFILE', data);
-        
-        // Update local state optimistically
-        setUser({
-          ...user,
-          user_metadata: {
-            ...user.user_metadata,
-            ...data,
-          },
-        });
-        
-        console.log('Profile update queued for when online');
-        return;
-      }
       
       // Update auth user metadata
       const { error: authError } = await supabase.auth.updateUser({
@@ -231,25 +219,6 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(() => 
       });
       if (authError) throw authError;
       
-      // Also update the users table in database
-      if (data.firstName || data.lastName) {
-        const { error: dbError } = await (supabase as any)
-          .from('users')
-          .upsert({
-            id: user.id,
-            email: user.email || '',
-            first_name: data.firstName || data.first_name,
-            last_name: data.lastName || data.last_name,
-            display_name: data.displayName || `${data.firstName || ''} ${data.lastName || ''}`.trim(),
-            phone: data.phone,
-            updated_at: new Date().toISOString(),
-          });
-        
-        if (dbError) {
-          console.error('Error updating user in database:', dbError);
-        }
-      }
-      
       // Update local user metadata
       setUser({
         ...user,
@@ -258,11 +227,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(() => 
           ...data,
         },
       });
-      
-      // Cache the updated profile
-      await offlineManager.setCache(`profile_${user.id}`, data, 1440); // Cache for 24 hours
     } catch (error: any) {
-      console.error('Profile update error:', error);
       throw new Error(error.message);
     }
   }, [user]);
