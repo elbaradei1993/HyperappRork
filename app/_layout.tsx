@@ -1,8 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
-import * as ExpoSplashScreen from "expo-splash-screen";
-import React, { useEffect, useState, useMemo } from "react";
-import { StyleSheet } from "react-native";
+import React from "react";
+import { StyleSheet, Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LocationProvider } from "@/contexts/LocationContext";
@@ -13,10 +12,9 @@ import { NotificationProvider } from "@/contexts/NotificationContext";
 import { GuardianProvider } from "@/contexts/GuardianContext";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import SplashScreen from "./splash";
 import { NotificationManager } from "@/components/NotificationManager";
 
-ExpoSplashScreen.preventAutoHideAsync();
+// Remove splash screen handling - let Expo handle it natively
 
 const styles = StyleSheet.create({
   container: {
@@ -29,26 +27,36 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5, // 5 minutes
-      gcTime: 1000 * 60 * 10, // 10 minutes (formerly cacheTime)
+      gcTime: 1000 * 60 * 10, // 10 minutes
       retry: 2,
-      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+      retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000),
       refetchOnWindowFocus: false,
-      refetchOnReconnect: 'always',
+      refetchOnReconnect: 'always' as const,
     },
     mutations: {
-      retry: 1,
-      retryDelay: 1000,
+      retry: Platform.OS === 'web' ? 0 : 1,
     },
   },
 });
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerBackTitle: "Back", animation: 'slide_from_right' }}>
+    <Stack 
+      screenOptions={{ 
+        headerBackTitle: "Back", 
+        animation: Platform.OS === 'ios' ? 'ios_from_right' : 'fade',
+        headerStyle: {
+          backgroundColor: '#1a1a2e',
+        },
+        headerTintColor: '#fff',
+        headerTitleStyle: {
+          fontWeight: 'bold' as const,
+        },
+      }}
+    >
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="splash" options={{ headerShown: false }} />
       <Stack.Screen name="privacy-policy" options={{ title: "Privacy Policy" }} />
       <Stack.Screen name="terms-of-service" options={{ title: "Terms of Service" }} />
       <Stack.Screen name="notifications" options={{ title: "Notifications" }} />
@@ -61,37 +69,26 @@ function RootLayoutNav() {
       <Stack.Screen name="terms-policies" options={{ title: "Terms & Policies" }} />
       <Stack.Screen name="activity-history" options={{ title: "Activity History" }} />
       <Stack.Screen name="alert-details/[id]" options={{ title: "Alert Details" }} />
-
       <Stack.Screen name="geofences" options={{ title: "Geofences" }} />
-      <Stack.Screen name="+not-found" />
+      <Stack.Screen name="settings" options={{ title: "Settings" }} />
+      <Stack.Screen name="leaderboard" options={{ title: "Leaderboard" }} />
+      <Stack.Screen name="data-storage" options={{ title: "Data Storage" }} />
+      <Stack.Screen name="+not-found" options={{ title: "Not Found" }} />
     </Stack>
   );
 }
 
 export default function RootLayout() {
-  const [showSplash, setShowSplash] = useState(true);
-  const [isReady, setIsReady] = useState(false);
+  // Removed splash screen handling to let Expo handle it natively
 
-  useEffect(() => {
-    // Hide the native splash screen
-    ExpoSplashScreen.hideAsync().catch(console.error);
-    
-    // Mark as ready after a short delay to ensure everything is loaded
-    const timer = setTimeout(() => {
-      setIsReady(true);
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Memoize the provider tree to prevent unnecessary re-renders
-  const appContent = useMemo(() => (
+  // Simplified provider structure - combine related contexts
+  return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={styles.container}>
-          <StorageProvider>
-            <SettingsProvider>
-              <AuthProvider>
+          <AuthProvider>
+            <StorageProvider>
+              <SettingsProvider>
                 <LocationProvider>
                   <AlertProvider>
                     <NotificationProvider>
@@ -102,21 +99,11 @@ export default function RootLayout() {
                     </NotificationProvider>
                   </AlertProvider>
                 </LocationProvider>
-              </AuthProvider>
-            </SettingsProvider>
-          </StorageProvider>
+              </SettingsProvider>
+            </StorageProvider>
+          </AuthProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>
     </ErrorBoundary>
-  ), []);
-
-  if (!isReady) {
-    return null; // Return null while app is initializing
-  }
-
-  if (showSplash) {
-    return <SplashScreen onFinish={() => setShowSplash(false)} />;
-  }
-
-  return appContent;
+  );
 }
