@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,42 +8,96 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { Shield, MapPin, ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 
 export default function SignupScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signUp } = useAuth();
+
+  const { signUp, user } = useAuth();
+  
+  // Navigate to tabs if user is already authenticated
+  useEffect(() => {
+    if (user) {
+      console.log('[SignupScreen] User already authenticated, redirecting to tabs');
+      router.replace('/(tabs)/map');
+    }
+  }, [user]);
 
   const handleSignup = async () => {
+    console.log('[SignupScreen] Starting signup attempt');
+    
     if (!email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Missing Information', 'Please fill in all fields');
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      Alert.alert('Password Mismatch', 'Passwords do not match');
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      Alert.alert('Weak Password', 'Password must be at least 6 characters long');
       return;
     }
 
     setLoading(true);
     try {
-      await signUp(email, password);
-      Alert.alert('Success', 'Account created! Please check your email to verify your account.');
-      router.replace('/(auth)/login');
+      console.log('[SignupScreen] Calling signUp with email:', email.trim());
+      await signUp(email.trim(), password);
+      console.log('[SignupScreen] Sign up successful!');
+      
+      // Navigate immediately - the auth context will handle the user state
+      console.log('[SignupScreen] Navigating to tabs');
+      router.replace('/(tabs)/map');
+      
     } catch (error: any) {
-      Alert.alert('Signup Failed', error.message);
+      console.error('[SignupScreen] Signup error:', error);
+      const errorMessage = error.message || 'Unknown error occurred';
+      
+      // User-friendly error handling
+      if (errorMessage.includes('already registered') || errorMessage.includes('already_registered')) {
+        Alert.alert(
+          'Account Already Exists',
+          'This email is already registered. Would you like to sign in instead?',
+          [
+            { text: 'Go to Sign In', onPress: () => router.push('/(auth)/login') },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      } else if (errorMessage.includes('check your email')) {
+        Alert.alert(
+          'Account Created!',
+          errorMessage,
+          [
+            { text: 'Go to Sign In', onPress: () => router.push('/(auth)/login') }
+          ]
+        );
+      } else if (errorMessage.includes('Network') || errorMessage.includes('network') || errorMessage.includes('connection')) {
+        Alert.alert(
+          'Connection Error',
+          'Unable to connect to the server. Please check your internet connection and try again.'
+        );
+      } else if (errorMessage.includes('Password') || errorMessage.includes('password')) {
+        Alert.alert('Password Error', errorMessage);
+      } else {
+        Alert.alert('Sign Up Failed', errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -64,10 +118,11 @@ export default function SignupScreen() {
         
         <View style={styles.content}>
           <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              <Shield size={40} color="#ff4757" />
-              <MapPin size={32} color="#ffffff" style={styles.mapIcon} />
-            </View>
+            <Image 
+              source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/aqlrwbgnosn05yewyps54' }}
+              style={styles.logo}
+              resizeMode="contain"
+            />
             <Text style={styles.title}>Join HyperAPP</Text>
             <Text style={styles.subtitle}>Create your safety network</Text>
           </View>
@@ -81,6 +136,9 @@ export default function SignupScreen() {
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
+              autoComplete="email"
+              textContentType="emailAddress"
+              testID="email-input"
             />
             <TextInput
               style={styles.input}
@@ -89,6 +147,9 @@ export default function SignupScreen() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry
+              autoComplete="password-new"
+              textContentType="newPassword"
+              testID="password-input"
             />
             <TextInput
               style={styles.input}
@@ -97,15 +158,22 @@ export default function SignupScreen() {
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
+              autoComplete="password-new"
+              textContentType="newPassword"
+              testID="confirm-password-input"
             />
 
             <TouchableOpacity
               style={[styles.signupButton, loading && styles.signupButtonDisabled]}
               onPress={handleSignup}
               disabled={loading}
+              testID="create-account-button"
             >
               {loading ? (
-                <ActivityIndicator color="#ffffff" />
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator color="#ffffff" size="small" />
+                  <Text style={styles.loadingText}>Creating Account...</Text>
+                </View>
               ) : (
                 <Text style={styles.signupButtonText}>Create Account</Text>
               )}
@@ -119,6 +187,8 @@ export default function SignupScreen() {
                 Already have an account? <Text style={styles.loginLink}>Sign In</Text>
               </Text>
             </TouchableOpacity>
+
+
           </View>
         </View>
       </LinearGradient>
@@ -149,13 +219,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 48,
   },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  mapIcon: {
-    marginLeft: -8,
+  logo: {
+    width: 100,
+    height: 100,
+    marginBottom: 20,
   },
   title: {
     fontSize: 32,
@@ -195,6 +262,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  loadingText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   loginButton: {
     alignItems: 'center',
     marginTop: 16,
@@ -207,4 +284,5 @@ const styles = StyleSheet.create({
     color: '#ff4757',
     fontWeight: '600',
   },
+
 });
