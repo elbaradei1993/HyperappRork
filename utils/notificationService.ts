@@ -1,8 +1,8 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Notification service that works with Expo Go v53
-// Since expo-notifications is not fully supported in Expo Go v53,
+// Notification service that works with Expo Go v54
+// Since expo-notifications is not fully supported in Expo Go v54,
 // we use a local notification system with AsyncStorage
 
 interface LocalNotification {
@@ -47,7 +47,7 @@ class NotificationService {
     }
   }
 
-  // Check if push notifications are available (always false in Expo Go v53)
+  // Check if push notifications are available (always false in Expo Go v54)
   async checkPushNotificationSupport(): Promise<boolean> {
     // In Expo Go v53, push notifications are not supported
     // Return false to prevent any attempts to use expo-notifications
