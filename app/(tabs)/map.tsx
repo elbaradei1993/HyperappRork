@@ -1373,8 +1373,8 @@ const getStyles = (colors: any, insets: any) => StyleSheet.create({
   },
   navigationButton: {
     position: 'absolute',
-    bottom: 190,
-    left: 20,
+    bottom: 200,
+    left: 16,
     width: 56,
     height: 56,
     justifyContent: 'center',
