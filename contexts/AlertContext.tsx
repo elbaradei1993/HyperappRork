@@ -1,8 +1,8 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { soundManager } from '@/utils/soundManager';
-import { Alert as RNAlert } from 'react-native';
+
 
 interface Alert {
   id: string;
@@ -57,15 +57,10 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
   const [vibeHistory, setVibeHistory] = useState<any[]>([]);
   const [sosHistory, setSOSHistory] = useState<any[]>([]);
   
-  // Performance optimization: Use refs for timers and subscriptions
-  const autoRefreshTimer = useRef<NodeJS.Timeout | null>(null);
-  const realtimeSubscription = useRef<any>(null);
-  const lastFetchTime = useRef<number>(0);
-  const FETCH_COOLDOWN = 5000; // 5 seconds cooldown between fetches
+
 
   const loadVibeHistory = useCallback(async () => {
     try {
-      console.log('Loading vibe history...');
       const { data, error } = await supabase
         .from('vibe_history')
         .select('*')
@@ -74,26 +69,17 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
       
       if (error) {
         console.error('Error loading vibe history:', error);
-        // Don't throw, just log the error to prevent app crashes
         return;
       }
       
-      console.log(`Loaded ${data?.length || 0} vibe history records`);
       setVibeHistory(data || []);
     } catch (error) {
       console.error('Error in loadVibeHistory:', error);
-      // Graceful error handling
-      RNAlert.alert(
-        'Connection Issue',
-        'Unable to load vibe history. Please check your connection.',
-        [{ text: 'OK' }]
-      );
     }
   }, []);
 
   const loadSOSHistory = useCallback(async () => {
     try {
-      console.log('Loading SOS history...');
       const { data, error } = await supabase
         .from('sos_history')
         .select('*')
@@ -102,24 +88,19 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
       
       if (error) {
         console.error('Error loading SOS history:', error);
-        // Don't throw, just log the error to prevent app crashes
         return;
       }
       
-      console.log(`Loaded ${data?.length || 0} SOS history records`);
       setSOSHistory(data || []);
     } catch (error) {
       console.error('Error in loadSOSHistory:', error);
-      // Graceful error handling without disrupting user experience
     }
   }, []);
 
   const moveExpiredVibesToHistory = useCallback(async () => {
     try {
-      console.log('Checking for expired vibes...');
       const now = new Date().toISOString();
       
-      // Get expired vibes
       const { data: expiredVibes, error: fetchError } = await supabase
         .from('alerts')
         .select('*')
@@ -133,11 +114,8 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
       }
       
       if (!expiredVibes || expiredVibes.length === 0) {
-        console.log('No expired vibes found');
         return;
       }
-      
-      console.log(`Found ${expiredVibes.length} expired vibes`);
       
       // Move to history
       const historyRecords = expiredVibes.map((vibe: any) => ({
@@ -175,12 +153,7 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
         return;
       }
       
-      console.log('Successfully moved expired vibes to history');
-      
-      // Update local state
       setAlerts(prev => prev.filter(alert => !expiredIds.includes(alert.id)));
-      
-      // Reload vibe history
       loadVibeHistory();
     } catch (error) {
       console.error('Error in moveExpiredVibesToHistory:', error);
@@ -189,11 +162,9 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
 
   const moveExpiredSOSToHistory = useCallback(async () => {
     try {
-      console.log('Checking for expired SOS reports...');
       const now = new Date().toISOString();
       const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
       
-      // Get SOS reports older than 12 hours or resolved
       const { data: expiredSOS, error: fetchError } = await supabase
         .from('alerts')
         .select('*')
@@ -206,11 +177,8 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
       }
       
       if (!expiredSOS || expiredSOS.length === 0) {
-        console.log('No expired SOS reports found');
         return;
       }
-      
-      console.log(`Found ${expiredSOS.length} expired SOS reports`);
       
       // Move to history
       const historyRecords = expiredSOS.map((sos: any) => {
@@ -257,12 +225,7 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
         return;
       }
       
-      console.log('Successfully moved expired SOS reports to history');
-      
-      // Update local state
       setAlerts(prev => prev.filter(alert => !expiredIds.includes(alert.id)));
-      
-      // Reload SOS history
       loadSOSHistory();
     } catch (error) {
       console.error('Error in moveExpiredSOSToHistory:', error);
@@ -295,7 +258,7 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
         schema: 'public', 
         table: 'alerts' 
       }, (payload) => {
-        console.log('Real-time alert update:', payload);
+
         if (payload.eventType === 'INSERT') {
           const newAlert = payload.new as Alert;
           setAlerts(prev => [newAlert, ...prev]);
@@ -328,7 +291,6 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
   const loadAlerts = async () => {
     try {
       setLoading(true);
-      console.log('🔄 Loading alerts from Supabase...');
       const { data, error } = await supabase
         .from('alerts')
         .select('*')
@@ -336,19 +298,8 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
         .limit(100);
       
       if (error) {
-        console.error('❌ Supabase error loading alerts:', error);
-        console.error('Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
+        console.error('Error loading alerts:', error);
         throw error;
-      }
-      
-      console.log(`✅ Loaded ${data?.length || 0} alerts from Supabase`);
-      if (data && data.length > 0) {
-        console.log('Sample alert:', JSON.stringify(data[0], null, 2));
       }
       
       // Transform data to match our Alert interface
@@ -369,9 +320,8 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
       }));
       
       setAlerts(transformedAlerts);
-      console.log(`✅ Alerts set in state: ${transformedAlerts.length}`);
     } catch (error: any) {
-      console.error('❌ Error loading alerts:', error.message || error);
+      console.error('Error loading alerts:', error.message || error);
       setAlerts([]);
     } finally {
       setLoading(false);
@@ -380,18 +330,15 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
 
   const loadNearbyUsers = async () => {
     try {
-      console.log('Loading nearby users from Supabase...');
       const { data, error } = await supabase
         .from('users')
         .select('id, location, role')
         .not('location', 'is', null);
       
       if (error) {
-        console.error('Supabase error loading users:', error);
+        console.error('Error loading users:', error);
         throw error;
       }
-      
-      console.log(`Loaded ${data?.length || 0} users from Supabase`);
       
       const users = (data || []).map((user: any) => {
         let parsedLocation = { latitude: 0, longitude: 0 };
@@ -401,16 +348,11 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
             if (user.location.startsWith('{') || user.location.startsWith('[')) {
               try {
                 parsedLocation = JSON.parse(user.location);
-              } catch (e) {
-                // Not valid JSON, it's probably a city name or address
-                console.log(`User ${user.id} has location as city/address: ${user.location}`);
-                // Skip this user as we need coordinates
+              } catch {
                 return null;
               }
             } else {
-              // It's a plain string (city name, address, etc.)
-              console.log(`User ${user.id} has location as text: ${user.location}`);
-              return null; // Skip users without coordinate data
+              return null;
             }
           } else if (user.location && typeof user.location === 'object') {
             parsedLocation = user.location;
@@ -418,9 +360,7 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
             // No valid location data
             return null;
           }
-        } catch (e) {
-          console.error('Error parsing user location for user', user.id, ':', e);
-          console.error('Location value was:', user.location);
+        } catch {
           return null;
         }
         
@@ -428,7 +368,6 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
         if (!parsedLocation.latitude || !parsedLocation.longitude ||
             typeof parsedLocation.latitude !== 'number' || 
             typeof parsedLocation.longitude !== 'number') {
-          console.log(`Invalid coordinates for user ${user.id}:`, parsedLocation);
           return null;
         }
         
@@ -450,9 +389,6 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
   const addAlert = useCallback(async (alertData: Omit<Alert, 'id' | 'timestamp'>) => {
     try {
       setLoading(true);
-      console.log('=== ADDING ALERT TO SUPABASE ===');
-      console.log('Alert data received:', JSON.stringify(alertData, null, 2));
-      
       // Prepare the insert data
       const insertData: any = {
         alert_type: alertData.alert_type, // Changed from 'type' to 'alert_type'
@@ -471,8 +407,6 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
         insertData.expires_at = expirationDate.toISOString();
       }
       
-      console.log('Formatted insert data:', JSON.stringify(insertData, null, 2));
-      
       const { data, error } = await supabase
         .from('alerts')
         .insert([insertData] as any)
@@ -480,22 +414,13 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
         .single();
       
       if (error) {
-        console.error('❌ SUPABASE ERROR:', error);
-        console.error('Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
+        console.error('Error adding alert:', error);
         throw error;
       }
       
       if (!data) {
-        console.error('❌ No data returned from insert');
         throw new Error('No data returned from insert');
       }
-      
-      console.log('✅ Data returned from Supabase:', JSON.stringify(data, null, 2));
       
       // Transform the returned data to match our Alert interface
       const transformedAlert: Alert = {
@@ -514,23 +439,14 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
         expires_at: (data as any).expires_at,
       };
       
-      setAlerts(prev => {
-        const newAlerts = [transformedAlert, ...prev];
-        console.log(`✅ Alert added to state. Total alerts: ${newAlerts.length}`);
-        return newAlerts;
-      });
+      setAlerts(prev => [transformedAlert, ...prev]);
       
-      console.log('✅ Alert added successfully:', transformedAlert);
-      
-      // Reload alerts to ensure sync
       setTimeout(() => {
-        console.log('🔄 Reloading alerts to ensure sync...');
         loadAlerts();
       }, 1000);
       
     } catch (error: any) {
-      console.error('❌ ERROR ADDING ALERT:', error);
-      console.error('Full error object:', error);
+      console.error('Error adding alert:', error);
       throw new Error(error.message || 'Failed to add alert');
     } finally {
       setLoading(false);
@@ -540,8 +456,6 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
   const sendSOSAlert = useCallback(async (sosData: any): Promise<Alert> => {
     try {
       setLoading(true);
-      console.log('Sending SOS alert to Supabase:', sosData);
-      
       // Prepare the insert data
       const insertData: any = {
         alert_type: sosData.alert_type || 'Emergency', // Changed from 'type' to 'alert_type'
@@ -553,8 +467,6 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
         user_id: sosData.anonymous ? null : sosData.userId,
         // SOS reports don't have automatic expiration like vibes, but are moved after 12 hours or when resolved
       };
-      
-      console.log('SOS Insert data:', insertData);
       
       const { data, error } = await supabase
         .from('alerts')
@@ -589,7 +501,6 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
       };
       
       setAlerts(prev => [transformedAlert, ...prev]);
-      console.log('SOS Alert sent successfully:', transformedAlert);
       return transformedAlert;
     } catch (error: any) {
       console.error('Error sending SOS alert:', error);
@@ -613,8 +524,8 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
 
   const markAlertResolved = useCallback(async (alertId: string) => {
     try {
-      console.log('Marking alert as resolved:', alertId);
-      const { data, error } = await (supabase
+
+      const { error } = await (supabase
         .from('alerts') as any)
         .update({ resolved: true })
         .eq('id', alertId)
@@ -625,8 +536,6 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
         console.error('Supabase error marking resolved:', error);
         throw error;
       }
-      
-      console.log('Alert marked as resolved:', data);
       
       // Update local state
       setAlerts(prev => prev.map(alert => 
@@ -640,8 +549,6 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
   
   const respondToAlert = useCallback(async (alertId: string, userId: string) => {
     try {
-      console.log('Responding to alert:', alertId, 'by user:', userId);
-      
       // Get current alert to update responded_by array
       const { data: currentAlert, error: fetchError } = await supabase
         .from('alerts')
@@ -654,16 +561,12 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
         throw fetchError;
       }
       
-      console.log('Current alert responded_by:', currentAlert);
-      
       const respondedBy: string[] = (currentAlert as any)?.responded_by || [];
       if (!respondedBy.includes(userId)) {
         respondedBy.push(userId);
       }
       
-      console.log('Updating responded_by to:', respondedBy);
-      
-      const { data: updatedAlert, error } = await (supabase
+      const { error } = await (supabase
         .from('alerts') as any)
         .update({ responded_by: respondedBy })
         .eq('id', alertId)
@@ -674,8 +577,6 @@ export const [AlertProvider, useAlerts] = createContextHook<AlertContextType>(()
         console.error('Supabase error updating responded_by:', error);
         throw error;
       }
-      
-      console.log('Alert updated with response:', updatedAlert);
       
       // Update local state
       setAlerts(prev => prev.map(alert => 
