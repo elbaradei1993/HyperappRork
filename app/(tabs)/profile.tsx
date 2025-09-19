@@ -79,7 +79,7 @@ interface ProfileData {
 }
 
 export default function ProfileScreen() {
-  const { user, updateProfile, signOut } = useAuth();
+  const { user, updateProfile, signOut, isDemoMode } = useAuth();
   const { t, isDark } = useSettings();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -667,6 +667,21 @@ export default function ProfileScreen() {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header Section */}
         <View style={[styles.header, isDark && styles.headerDark, { paddingTop: insets.top + 20 }]}>
+          {/* App Logo and Name */}
+          <View style={styles.appHeader}>
+            <Image 
+              source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/aqlrwbgnosn05yewyps54' }}
+              style={styles.appLogo}
+              resizeMode="contain"
+            />
+            <Text style={[styles.appName, isDark && styles.appNameDark]}>HyperAPP</Text>
+            {isDemoMode && (
+              <View style={styles.demoBadge}>
+                <Text style={styles.demoBadgeText}>DEMO</Text>
+              </View>
+            )}
+          </View>
+          
           <View style={styles.profileSection}>
             <TouchableOpacity 
               onPress={editing ? handleImagePicker : undefined} 
@@ -1450,6 +1465,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     borderBottomColor: 'transparent',
   },
+  appHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 10,
+  },
+  appLogo: {
+    width: 32,
+    height: 32,
+  },
+  appName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    letterSpacing: -0.5,
+  },
+  appNameDark: {
+    color: '#FFFFFF',
+  },
   headerDark: {
     backgroundColor: 'transparent',
     borderBottomColor: 'transparent',
@@ -2034,5 +2068,18 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '500',
     color: '#FF3B30',
+  },
+  demoBadge: {
+    backgroundColor: '#ff4757',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  demoBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });
