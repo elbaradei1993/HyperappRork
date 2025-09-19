@@ -5,8 +5,8 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 export default function Index() {
   const { user, loading } = useAuth();
 
+  // Show loading while checking auth
   if (loading) {
-    // Show a loading indicator while checking auth status
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#ff4757" />
@@ -17,10 +17,9 @@ export default function Index() {
   // Redirect based on auth status
   if (user) {
     return <Redirect href="/(tabs)/map" />;
+  } else {
+    return <Redirect href="/(auth)/login" />;
   }
-
-  // Not logged in - redirect to login
-  return <Redirect href="/(auth)/login" />;
 }
 
 const styles = StyleSheet.create({
