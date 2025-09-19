@@ -88,7 +88,7 @@ function NativeMapComponent({ location, alerts, nearbyUsers, onMapPress, onAlert
           setIsMapLoading(false);
         })
         .catch((error) => {
-          console.log('Failed to load react-native-maps:', error);
+          // Silent fail - use fallback
           setIsMapLoading(false);
         });
     } else {
